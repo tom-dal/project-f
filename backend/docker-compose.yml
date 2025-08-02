@@ -1,0 +1,63 @@
+# DEPRECATO: Usa solo build-and-push-backend.sh per build/push.
+# Questo file rimane come esempio di compose locale.
+# Per build e push production usa:
+#   ./build-and-push-backend.sh [alpha-tag]
+
+version: '3.8'
+
+services:
+  # Local PostgreSQL for development/testing
+  postgres-local:
+    image: postgres:15-alpine
+    container_name: debt-collection-postgres
+    environment:
+      POSTGRES_DB: debt_manager
+      POSTGRES_USER: dbuser
+      POSTGRES_PASSWORD: dbpass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dbuser -d debt_manager"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend application
+  backend:
+    image: debt-collection-backend
+    container_name: debt-collection-backend
+    ports:
+      - "8080:8080"
+    environment:
+      # For local development with local PostgreSQL
+      DB_HOST: postgres-local
+      DB_PORT: 5432
+      DB_NAME: debt_manager
+      DB_USERNAME: dbuser
+      DB_PASSWORD: dbpass
+      JAVA_OPTS: "-Xmx512m -Xms256m"
+      SPRING_PROFILES_ACTIVE: production
+    depends_on:
+      postgres-local:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres_data:
+
+# To use with external Render database, create a file called .env with:
+# DB_HOST=your-render-host.frankfurt-postgres.render.com
+# DB_PORT=5432
+# DB_NAME=your_database_name
+# DB_USERNAME=your_username
+# DB_PASSWORD=your_secure_password
+# SPRING_DATASOURCE_URL=jdbc:postgresql://your-host:5432/your_db?sslmode=require
+
+# Then run: docker-compose --env-file .env up

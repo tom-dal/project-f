@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  backend:
+    image: ghcr.io/tom-dal/project-f/backend:1.0.0-alpha.10
+    container_name: debt-collection-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=production
+      - DB_HOST=${DB_HOST:-localhost}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-debtcollection}
+      - DB_USERNAME=${DB_USERNAME:-dbuser}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - JAVA_OPTS=-Xmx512m -Xms256m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - debt-collection-network
+
+  frontend:
+    image: ghcr.io/tom-dal/project-f/frontend:1.0.0-alpha.10
+    container_name: debt-collection-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - debt-collection-network
+
+networks:
+  debt-collection-network:
+    driver: bridge
+
+# Per usare questo docker-compose:
+# 1. Crea un file .env con le variabili del database:
+#    DB_HOST=your-db-host
+#    DB_PORT=5432
+#    DB_NAME=debtcollection
+#    DB_USERNAME=your-username
+#    DB_PASSWORD=your-password
+# 2. Esegui: docker-compose up -d

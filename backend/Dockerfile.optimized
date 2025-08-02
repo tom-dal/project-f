@@ -1,0 +1,60 @@
+# Dockerfile ottimizzato con layer caching
+# Separa le dipendenze dal codice per cache più efficiente
+
+# Stage 1: Download dipendenze (questo layer cambia raramente)
+FROM eclipse-temurin:17-jdk-jammy AS dependencies
+
+WORKDIR /app
+
+# Copia solo i file di configurazione Maven
+COPY pom.xml ./
+COPY .mvn .mvn
+COPY mvnw ./
+
+# Download delle dipendenze (questo layer viene cachato finché non cambia pom.xml)
+RUN ./mvnw dependency:go-offline -B
+
+# Stage 2: Build dell'applicazione
+FROM dependencies AS build
+
+# Copia il codice sorgente
+COPY src ./src
+
+# Build dell'applicazione (solo questo layer viene ricostruito quando cambia il codice)
+RUN ./mvnw clean package -DskipTests -B
+
+# Stage 3: Runtime
+FROM eclipse-temurin:17-jre-jammy
+
+# Crea utente non-root per sicurezza
+RUN groupadd -r appgroup && useradd -r -g appgroup appuser
+
+# Directory di lavoro
+WORKDIR /app
+
+# Copia il JAR dall'immagine di build
+COPY --from=build /app/target/project-f-backend-*.jar app.jar
+
+# Cambia ownership all'utente non-root
+RUN chown -R appuser:appgroup /app
+USER appuser
+
+# Esponi porta 8080
+EXPOSE 8080
+
+# Variabili d'ambiente per database esterno (valori di default - NON per produzione)
+ENV JAVA_OPTS="-Xmx512m -Xms256m"
+ENV SPRING_PROFILES_ACTIVE=production
+ENV DB_HOST=localhost
+ENV DB_PORT=5432
+ENV DB_NAME=debtcollection
+ENV DB_USERNAME=dbuser
+# NOTA: DB_PASSWORD deve essere passata SOLO come variabile d'ambiente durante il run del container
+# NON memorizzare mai password nell'immagine Docker
+
+# Comando per avviare l'applicazione con configurazione database esterna
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Dspring.datasource.url=jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME} -Dspring.datasource.username=${DB_USERNAME} -Dspring.datasource.password=${DB_PASSWORD:-defaultpass} -jar app.jar"]
+
+# Healthcheck per verificare lo stato dell'applicazione
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+  CMD curl -f http://localhost:8080/actuator/health || exit 1

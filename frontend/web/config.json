@@ -1,0 +1,4 @@
+{
+  "_comment": "Configurazione per sviluppo locale",
+  "API_URL": "http://localhost:8080"
+}

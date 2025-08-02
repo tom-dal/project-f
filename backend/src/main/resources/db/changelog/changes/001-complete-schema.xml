@@ -1,0 +1,338 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                      http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="001-complete-schema" author="system">
+        <comment>Complete database schema for debt collection management system</comment>
+        
+        <!-- CREATE SEQUENCES -->
+        <createSequence sequenceName="users_id_seq" startValue="1" incrementBy="1"/>
+        <createSequence sequenceName="debt_case_id_seq" startValue="1" incrementBy="1"/>
+        <createSequence sequenceName="debt_case_audit_id_seq" startValue="1" incrementBy="1"/>
+        <createSequence sequenceName="state_transition_config_id_seq" startValue="1" incrementBy="1"/>
+        <createSequence sequenceName="payment_id_seq" startValue="1" incrementBy="1"/>
+        <createSequence sequenceName="installment_id_seq" startValue="1" incrementBy="1"/>
+        
+        <!-- USERS TABLE -->
+        <createTable tableName="users">
+            <column name="id" type="BIGINT" defaultValueComputed="nextval('users_id_seq')">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="username" type="VARCHAR(50)">
+                <constraints unique="true" nullable="false"/>
+            </column>
+            <column name="password" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="password_expired" type="boolean" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_date" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_modified_date" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="VARCHAR(50)" defaultValue="system">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_modified_by" type="VARCHAR(50)" defaultValue="system">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <!-- USER ROLES TABLE -->
+        <createTable tableName="user_roles">
+            <column name="user_id" type="BIGINT">
+                <constraints nullable="false" foreignKeyName="fk_user_roles_user" references="users(id)"/>
+            </column>
+            <column name="role" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <!-- DEBT CASE TABLE -->
+        <createTable tableName="debt_case">
+            <column name="id" type="BIGINT" defaultValueComputed="nextval('debt_case_id_seq')">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="debtor_name" type="VARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="owed_amount" type="DECIMAL(19,2)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="paid" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="has_installment_plan" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="ongoing_negotiations" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <!-- USER PREFERENCE: Campo per indicare se la pratica è attiva o meno (soft delete) -->
+            <column name="active" type="boolean" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+            <column name="current_state" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="current_state_date" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="next_deadline_date" type="TIMESTAMP"/>
+            <column name="notes" type="TEXT"/>
+            <column name="created_date" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_modified_date" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="VARCHAR(50)" defaultValue="system">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_modified_by" type="VARCHAR(50)" defaultValue="system">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <!-- DEBT CASE AUDIT TABLE -->
+        <createTable tableName="debt_case_audit">
+            <column name="id" type="BIGINT" defaultValueComputed="nextval('debt_case_audit_id_seq')">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="debt_case_id" type="BIGINT">
+                <constraints nullable="false" foreignKeyName="fk_debt_case_audit_debt_case" references="debt_case(id)"/>
+            </column>
+            <column name="field_name" type="VARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="old_value" type="TEXT"/>
+            <column name="new_value" type="TEXT"/>
+            <column name="change_date" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="changed_by" type="VARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="change_reason" type="TEXT"/>
+        </createTable>
+
+        <!-- INSTALLMENT TABLE -->
+        <createTable tableName="installment">
+            <column name="id" type="BIGINT" defaultValueComputed="nextval('installment_id_seq')">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="debt_case_id" type="BIGINT">
+                <constraints nullable="false" foreignKeyName="fk_installment_debt_case" references="debt_case(id)"/>
+            </column>
+            <column name="installment_number" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="amount" type="DECIMAL(19,2)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="due_date" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="paid" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="paid_date" type="TIMESTAMP"/>
+            <column name="paid_amount" type="DECIMAL(19,2)"/>
+            <column name="created_date" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_modified_date" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="VARCHAR(50)" defaultValue="system">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_modified_by" type="VARCHAR(50)" defaultValue="system">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <!-- PAYMENT TABLE -->
+        <createTable tableName="payment">
+            <column name="id" type="BIGINT" defaultValueComputed="nextval('payment_id_seq')">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="debt_case_id" type="BIGINT">
+                <constraints nullable="false" foreignKeyName="fk_payment_debt_case" references="debt_case(id)"/>
+            </column>
+            <column name="amount" type="DECIMAL(19,2)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="payment_date" type="DATE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="installment_id" type="BIGINT">
+                <constraints nullable="true" foreignKeyName="fk_payment_installment" references="installment(id)"/>
+            </column>
+            <column name="created_date" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_modified_date" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="VARCHAR(50)" defaultValue="system">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_modified_by" type="VARCHAR(50)" defaultValue="system">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <!-- STATE TRANSITION CONFIG TABLE -->
+        <createTable tableName="state_transition_config">
+            <column name="id" type="BIGINT" defaultValueComputed="nextval('state_transition_config_id_seq')">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="from_state" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="to_state" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="days_to_transition" type="INT">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        
+        <!-- STATE TRANSITION CONFIG DATA -->
+        <!-- CUSTOM IMPLEMENTATION: Transizioni seguono ordine enum CaseState con 10 giorni per tutte -->
+        <insert tableName="state_transition_config">
+            <column name="id" valueComputed="nextval('state_transition_config_id_seq')"/>
+            <column name="from_state" value="MESSA_IN_MORA_DA_FARE"/>
+            <column name="to_state" value="MESSA_IN_MORA_INVIATA"/>
+            <column name="days_to_transition" valueNumeric="10"/>
+        </insert>
+        <insert tableName="state_transition_config">
+            <column name="id" valueComputed="nextval('state_transition_config_id_seq')"/>
+            <column name="from_state" value="MESSA_IN_MORA_INVIATA"/>
+            <column name="to_state" value="CONTESTAZIONE_DA_RISCONTRARE"/>
+            <column name="days_to_transition" valueNumeric="10"/>
+        </insert>
+        <insert tableName="state_transition_config">
+            <column name="id" valueComputed="nextval('state_transition_config_id_seq')"/>
+            <column name="from_state" value="CONTESTAZIONE_DA_RISCONTRARE"/>
+            <column name="to_state" value="DEPOSITO_RICORSO"/>
+            <column name="days_to_transition" valueNumeric="10"/>
+        </insert>
+        <insert tableName="state_transition_config">
+            <column name="id" valueComputed="nextval('state_transition_config_id_seq')"/>
+            <column name="from_state" value="DEPOSITO_RICORSO"/>
+            <column name="to_state" value="DECRETO_INGIUNTIVO_DA_NOTIFICARE"/>
+            <column name="days_to_transition" valueNumeric="10"/>
+        </insert>
+        <insert tableName="state_transition_config">
+            <column name="id" valueComputed="nextval('state_transition_config_id_seq')"/>
+            <column name="from_state" value="DECRETO_INGIUNTIVO_DA_NOTIFICARE"/>
+            <column name="to_state" value="DECRETO_INGIUNTIVO_NOTIFICATO"/>
+            <column name="days_to_transition" valueNumeric="10"/>
+        </insert>
+        <insert tableName="state_transition_config">
+            <column name="id" valueComputed="nextval('state_transition_config_id_seq')"/>
+            <column name="from_state" value="DECRETO_INGIUNTIVO_NOTIFICATO"/>
+            <column name="to_state" value="PRECETTO"/>
+            <column name="days_to_transition" valueNumeric="10"/>
+        </insert>
+        <insert tableName="state_transition_config">
+            <column name="id" valueComputed="nextval('state_transition_config_id_seq')"/>
+            <column name="from_state" value="PRECETTO"/>
+            <column name="to_state" value="PIGNORAMENTO"/>
+            <column name="days_to_transition" valueNumeric="10"/>
+        </insert>
+        <insert tableName="state_transition_config">
+            <column name="id" valueComputed="nextval('state_transition_config_id_seq')"/>
+            <column name="from_state" value="PIGNORAMENTO"/>
+            <column name="to_state" value="COMPLETATA"/>
+            <column name="days_to_transition" valueNumeric="10"/>
+        </insert>
+
+        <!-- INDEXES AND CONSTRAINTS -->
+        <addUniqueConstraint 
+            tableName="state_transition_config" 
+            columnNames="from_state,to_state"
+            constraintName="uk_state_transition_config_states"/>
+            
+        <!-- Performance indexes -->
+
+        <createIndex tableName="debt_case" indexName="idx_debt_case_current_state">
+            <column name="current_state"/>
+        </createIndex>
+
+        <createIndex tableName="debt_case" indexName="idx_debt_case_next_deadline">
+            <column name="next_deadline_date"/>
+        </createIndex>
+
+        <createIndex tableName="payment" indexName="idx_payment_debt_case_id">
+            <column name="debt_case_id"/>
+        </createIndex>
+        
+        <createIndex tableName="payment" indexName="idx_payment_date">
+            <column name="payment_date"/>
+        </createIndex>
+
+        <createIndex tableName="payment" indexName="idx_payment_installment_id">
+            <column name="installment_id"/>
+        </createIndex>
+
+        <createIndex tableName="installment" indexName="idx_installment_debt_case_id">
+            <column name="debt_case_id"/>
+        </createIndex>
+
+        <createIndex tableName="installment" indexName="idx_installment_due_date">
+            <column name="due_date"/>
+        </createIndex>
+
+    </changeSet>
+
+    <changeSet id="001-create-debt-case-indexes" author="system">
+        <comment>USER PREFERENCE: Indici strategici per ottimizzare query comuni nel sistema di gestione crediti</comment>
+
+        <!-- Indici principali per campo active (soft delete) -->
+        <createIndex tableName="debt_case" indexName="idx_debt_case_active">
+            <column name="active"/>
+        </createIndex>
+
+        <createIndex tableName="debt_case" indexName="idx_debt_case_active_state">
+            <column name="active"/>
+            <column name="current_state"/>
+        </createIndex>
+
+        <!-- USER PREFERENCE: Indice critico per scadenze su pratiche attive -->
+        <createIndex tableName="debt_case" indexName="idx_debt_case_active_deadline">
+            <column name="active"/>
+            <column name="next_deadline_date"/>
+        </createIndex>
+
+        <createIndex tableName="debt_case" indexName="idx_debt_case_active_state_deadline">
+            <column name="active"/>
+            <column name="current_state"/>
+            <column name="next_deadline_date"/>
+        </createIndex>
+
+        <!-- USER PREFERENCE: Indice singolo per debtor_name per query LIKE efficienti -->
+        <createIndex tableName="debt_case" indexName="idx_debt_case_debtor_name">
+            <column name="debtor_name"/>
+        </createIndex>
+
+        <!-- Indici singoli per backward compatibility -->
+        <createIndex tableName="debt_case" indexName="idx_debt_case_state">
+            <column name="current_state"/>
+        </createIndex>
+
+        <createIndex tableName="debt_case" indexName="idx_debt_case_deadline">
+            <column name="next_deadline_date"/>
+        </createIndex>
+
+    </changeSet>
+
+</databaseChangeLog>

@@ -1,0 +1,37 @@
+# Dockerfile ottimizzato per build veloci
+# Presuppone che il JAR sia già stato buildato con Maven
+
+FROM eclipse-temurin:17-jre-jammy
+
+# Crea utente non-root per sicurezza
+RUN groupadd -r appgroup && useradd -r -g appgroup appuser
+
+# Directory di lavoro
+WORKDIR /app
+
+# Copia il JAR già buildato (deve esistere in target/)
+COPY target/project-f-backend-*.jar app.jar
+
+# Cambia ownership all'utente non-root
+RUN chown -R appuser:appgroup /app
+USER appuser
+
+# Esponi porta 8080
+EXPOSE 8080
+
+# Variabili d'ambiente per database esterno (valori di default - NON per produzione)
+ENV JAVA_OPTS="-Xmx512m -Xms256m"
+ENV SPRING_PROFILES_ACTIVE=production
+ENV DB_HOST=localhost
+ENV DB_PORT=5432
+ENV DB_NAME=debtcollection
+ENV DB_USERNAME=dbuser
+# NOTA: DB_PASSWORD deve essere passata SOLO come variabile d'ambiente durante il run del container
+# NON memorizzare mai password nell'immagine Docker
+
+# Comando per avviare l'applicazione con configurazione database esterna
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Dspring.datasource.url=jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME} -Dspring.datasource.username=${DB_USERNAME} -Dspring.datasource.password=${DB_PASSWORD:-defaultpass} -jar app.jar"]
+
+# Healthcheck per verificare lo stato dell'applicazione
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+  CMD curl -f http://localhost:8080/actuator/health || exit 1

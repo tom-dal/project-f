@@ -1,0 +1,135 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:provider/provider.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:async';
+import 'dart:developer' as developer;
+import 'screens/login_screen.dart';
+import 'screens/dashboard_screen.dart';
+import 'blocs/auth/auth_bloc.dart';
+import 'blocs/debt_case/debt_case_bloc.dart';
+import 'services/api_service.dart';
+import 'services/config_service.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Abilita i log per web in modalità debug
+  if (kDebugMode && kIsWeb) {
+    developer.log('Flutter Web Debug Mode - Logging enabled');
+  }
+  
+  // Carica la configurazione dall'esterno
+  await ConfigService.loadConfig();
+  
+  runApp(const DebtCollectionApp());
+}
+
+class AuthWrapper extends StatefulWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkInitialAuth();
+  }
+
+  Future<void> _checkInitialAuth() async {
+    final apiService = context.read<ApiService>();
+    final authBloc = context.read<AuthBloc>();
+    
+    final token = await apiService.getStoredToken();
+    
+    if (token == null) {
+      authBloc.add(CheckAuthStatus());
+      setState(() => _isLoading = false);
+      return;
+    }
+    
+    // Controlla se è un token di cambio password
+    final isPasswordToken = await apiService.isPasswordChangeToken();
+    
+    if (isPasswordToken) {
+      // Se è un token di cambio password, emetti lo stato non autenticato
+      // così il login screen mostrerà il dialog di cambio password
+      authBloc.add(CheckAuthStatus());
+    } else {
+      // Valida il token normale
+      final isValid = await apiService.validateToken();
+      if (isValid) {
+        authBloc.add(CheckAuthStatus());
+      } else {
+        authBloc.add(CheckAuthStatus());
+      }
+    }
+    
+    setState(() => _isLoading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    return BlocBuilder<AuthBloc, AuthState>(
+      builder: (context, state) {
+        if (state is AuthAuthenticated && !state.passwordExpired) {
+          // Solo se autenticato E la password non è scaduta, mostra la dashboard
+          return BlocProvider(
+            create: (context) => DebtCaseBloc(
+              context.read<ApiService>(),
+            ),
+            child: const DashboardScreen(),
+          );
+        }
+        
+        // In tutti gli altri casi (non autenticato, password scaduta, errore), mostra login
+        return const LoginScreen();
+      },
+    );
+  }
+}
+
+class DebtCollectionApp extends StatelessWidget {
+  const DebtCollectionApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Provider<ApiService>(
+      create: (_) => ApiService(),
+      child: BlocProvider(
+        create: (context) => AuthBloc(
+          apiService: context.read<ApiService>(),
+        ),
+        child: MaterialApp(
+          title: 'Debt Collection Manager',
+          theme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: Colors.blue,
+              primary: Colors.blue,
+              secondary: Colors.orange,
+            ),
+            useMaterial3: true,
+            appBarTheme: const AppBarTheme(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+            ),
+          ),
+          home: const AuthWrapper(),
+        ),
+      ),
+    );
+  }
+} 
