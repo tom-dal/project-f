@@ -933,7 +933,7 @@ class ApiService {
   }
 
   Future<void> updateState({
-    required int id,
+    required String id, // CUSTOM IMPLEMENTATION: Changed from int to String for MongoDB ObjectId compatibility
     DateTime? completionDate,
     String? notes,
   }) async {
