@@ -160,19 +160,25 @@ public class DebtCaseService {
      * CUSTOM IMPLEMENTATION: Supports advanced business logic filtering
      */
     public Page<DebtCaseDto> findWithFilters(DebtCaseFilterRequest filterRequest, Pageable pageable) {
-        // USER PREFERENCE: Simplified filtering logic - removed advanced business logic
         return debtCaseRepository.findByFilters(
             filterRequest.getDebtorName(),
             filterRequest.getState(),
-            // USER PREFERENCE: Supporto per filtri multipli su stato con logica OR
             filterRequest.getStates(),
             filterRequest.getMinAmount(),
             filterRequest.getMaxAmount(),
             filterRequest.getHasInstallmentPlan(),
             filterRequest.getPaid(),
             filterRequest.getOngoingNegotiations(),
-            // USER PREFERENCE: Filtro active per soft delete
             filterRequest.getActive(),
+            filterRequest.getNotes(),
+            filterRequest.getNextDeadlineFrom(),
+            filterRequest.getNextDeadlineTo(),
+            filterRequest.getCurrentStateFrom(),
+            filterRequest.getCurrentStateTo(),
+            filterRequest.getCreatedFrom(),
+            filterRequest.getCreatedTo(),
+            filterRequest.getLastModifiedFrom(),
+            filterRequest.getLastModifiedTo(),
             pageable
         ).map(debtCaseMapper::toDto);
     }

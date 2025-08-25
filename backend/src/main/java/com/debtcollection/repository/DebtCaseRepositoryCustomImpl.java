@@ -12,6 +12,7 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -36,40 +37,39 @@ public class DebtCaseRepositoryCustomImpl implements DebtCaseRepositoryCustom {
             Boolean paid,
             Boolean ongoingNegotiations,
             Boolean active,
+            String notes,
+            LocalDateTime nextDeadlineFrom,
+            LocalDateTime nextDeadlineTo,
+            LocalDateTime currentStateFrom,
+            LocalDateTime currentStateTo,
+            LocalDateTime createdFrom,
+            LocalDateTime createdTo,
+            LocalDateTime lastModifiedFrom,
+            LocalDateTime lastModifiedTo,
             Pageable pageable) {
 
-        // USER PREFERENCE: Build dynamic criteria based on provided filters
         Criteria criteria = new Criteria();
 
-        // Name LIKE filter (case-insensitive)
         if (debtorName != null && !debtorName.trim().isEmpty()) {
             criteria.and("debtorName").regex(debtorName.trim(), "i");
         }
 
-        // Single state filter
         if (state != null) {
             criteria.and("currentState").is(state);
         }
 
-        // Multiple states filter (OR logic) - takes precedence over single state
         if (states != null && !states.isEmpty()) {
             criteria.and("currentState").in(states);
         }
 
-        // Amount range filters (GTE/LTE) - CUSTOM IMPLEMENTATION: Direct Double comparison for MongoDB
-        // USER PREFERENCE: Now using Double type directly for reliable MongoDB numeric operations
         if (minAmount != null && maxAmount != null) {
-            // Both min and max: direct Double comparison
             criteria.and("owedAmount").gte(minAmount.doubleValue()).lte(maxAmount.doubleValue());
         } else if (minAmount != null) {
-            // Only min amount: direct Double comparison
             criteria.and("owedAmount").gte(minAmount.doubleValue());
         } else if (maxAmount != null) {
-            // Only max amount: direct Double comparison
             criteria.and("owedAmount").lte(maxAmount.doubleValue());
         }
 
-        // Boolean filters
         if (hasInstallmentPlan != null) {
             criteria.and("hasInstallmentPlan").is(hasInstallmentPlan);
         }
@@ -80,24 +80,36 @@ public class DebtCaseRepositoryCustomImpl implements DebtCaseRepositoryCustom {
             criteria.and("ongoingNegotiations").is(ongoingNegotiations);
         }
 
-        // Active filter (soft delete) - defaults to true if not specified
         if (active != null) {
             criteria.and("active").is(active);
         } else {
-            // USER PREFERENCE: Default to active=true for soft delete pattern
-            criteria.and("active").is(true);
+            criteria.and("active").is(true); // USER PREFERENCE: default active=true
         }
 
-        // Build query with criteria and pagination
+        // Notes substring case-insensitive
+        if (notes != null && !notes.trim().isEmpty()) {
+            criteria.and("notes").regex(notes.trim(), "i");
+        }
+
+        // Date ranges (inclusive)
+        applyDateRange(criteria, "nextDeadlineDate", nextDeadlineFrom, nextDeadlineTo);
+        applyDateRange(criteria, "currentStateDate", currentStateFrom, currentStateTo);
+        applyDateRange(criteria, "createdDate", createdFrom, createdTo);
+        applyDateRange(criteria, "lastModifiedDate", lastModifiedFrom, lastModifiedTo);
+
         Query query = new Query(criteria).with(pageable);
-
-        // Execute query
         List<DebtCase> debtCases = mongoTemplate.find(query, DebtCase.class);
-
-        // Get total count for pagination
-        Query countQuery = new Query(criteria);
-        long total = mongoTemplate.count(countQuery, DebtCase.class);
-
+        long total = mongoTemplate.count(new Query(criteria), DebtCase.class);
         return new PageImpl<>(debtCases, pageable, total);
+    }
+
+    private void applyDateRange(Criteria baseCriteria, String fieldName, LocalDateTime from, LocalDateTime to) {
+        if (from != null && to != null) {
+            baseCriteria.and(fieldName).gte(from).lte(to);
+        } else if (from != null) {
+            baseCriteria.and(fieldName).gte(from);
+        } else if (to != null) {
+            baseCriteria.and(fieldName).lte(to);
+        }
     }
 }

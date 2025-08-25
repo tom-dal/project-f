@@ -11,7 +11,7 @@ import java.util.List;
 
 /**
  * USER PREFERENCE: Custom repository interface for complex MongoDB queries
- * Uses MongoTemplate + Criteria for flexible filtering
+ * CUSTOM IMPLEMENTATION: Esteso con filtri notes e range date dedicati
  */
 public interface DebtCaseRepositoryCustom {
 
@@ -29,6 +29,16 @@ public interface DebtCaseRepositoryCustom {
         Boolean paid,
         Boolean ongoingNegotiations,
         Boolean active,              // Soft delete
+        String notes,
+        // Date ranges (inclusive)
+        LocalDateTime nextDeadlineFrom,
+        LocalDateTime nextDeadlineTo,
+        LocalDateTime currentStateFrom,
+        LocalDateTime currentStateTo,
+        LocalDateTime createdFrom,
+        LocalDateTime createdTo,
+        LocalDateTime lastModifiedFrom,
+        LocalDateTime lastModifiedTo,
         Pageable pageable
     );
 }

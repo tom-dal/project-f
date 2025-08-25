@@ -759,4 +759,124 @@ public class DebtCaseControllerIntegrationTest {
         mockMvc.perform(delete("/cases/1"))
                 .andExpect(status().isUnauthorized()); // 401 Unauthorized
     }
+
+    @Test
+    @WithMockUser(username = "testuser", roles = "USER")
+    void testFilterByAmountRange_InvalidRange() throws Exception {
+        mockMvc.perform(get("/cases")
+                .param("minAmount", "3000")
+                .param("maxAmount", "1000")
+                .contentType(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("L'importo minimo non può essere maggiore dell'importo massimo"))
+                .andExpect(jsonPath("$.error").value("IllegalArgumentException"));
+    }
+
+    @Test
+    @WithMockUser(username = "testuser", roles = "USER")
+    void testFilterByAmountRange_MinEqualsMax() throws Exception {
+        mockMvc.perform(get("/cases")
+                .param("minAmount", "1000.00")
+                .param("maxAmount", "1000.00")
+                .contentType(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$._embedded.cases", hasSize(1)))
+                .andExpect(jsonPath("$._embedded.cases[0].debtorName").value("Mario Rossi"))
+                .andExpect(jsonPath("$.page.totalElements").value(1));
+    }
+
+    @Test
+    @WithMockUser(username = "testuser", roles = "USER")
+    void testFilterByNotes_SubstringCaseInsensitive() throws Exception {
+        // Add notes to two cases
+        DebtCase mario = debtCaseRepository.findAll().stream().filter(c -> c.getDebtorName().equals("Mario Rossi")).findFirst().orElseThrow();
+        mario.setNotes("Urgente - verifica documenti");
+        debtCaseRepository.save(mario);
+        DebtCase gianni = debtCaseRepository.findAll().stream().filter(c -> c.getDebtorName().equals("Gianni Neri")).findFirst().orElseThrow();
+        gianni.setNotes("Non urgente - rateo futuro");
+        debtCaseRepository.save(gianni);
+
+        // Search substring 'URGENTE' should match both (case-insensitive, substring)
+        mockMvc.perform(get("/cases")
+                .param("notes", "urgente")
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$._embedded.cases", hasSize(2)))
+                .andExpect(jsonPath("$._embedded.cases[*].debtorName", containsInAnyOrder("Mario Rossi", "Gianni Neri")));
+
+        // Search substring 'verifica' only Mario
+        mockMvc.perform(get("/cases")
+                .param("notes", "verifica")
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$._embedded.cases", hasSize(1)))
+                .andExpect(jsonPath("$._embedded.cases[0].debtorName").value("Mario Rossi"));
+    }
+
+    @Test
+    @WithMockUser(username = "testuser", roles = "USER")
+    void testFilterByCurrentStateDateRange() throws Exception {
+        // Prepare deterministic dates
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime older = now.minusDays(10).withNano(0);
+        LocalDateTime newer = now.minusDays(2).withNano(0);
+
+        // Assign to two cases
+        DebtCase mario = debtCaseRepository.findAll().stream().filter(c -> c.getDebtorName().equals("Mario Rossi")).findFirst().orElseThrow();
+        mario.setCurrentStateDate(older);
+        debtCaseRepository.save(mario);
+        DebtCase gianni = debtCaseRepository.findAll().stream().filter(c -> c.getDebtorName().equals("Gianni Neri")).findFirst().orElseThrow();
+        gianni.setCurrentStateDate(newer);
+        debtCaseRepository.save(gianni);
+
+        // Narrow range to only capture 'newer' timestamp (±1 second)
+        LocalDateTime from = newer.minusSeconds(1);
+        LocalDateTime to = newer.plusSeconds(1);
+        mockMvc.perform(get("/cases")
+                .param("currentStateFrom", from.toString())
+                .param("currentStateTo", to.toString())
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$._embedded.cases", hasSize(1)))
+                .andExpect(jsonPath("$._embedded.cases[0].debtorName").value("Gianni Neri"));
+    }
+
+    @Test
+    @WithMockUser(username = "testuser", roles = "USER")
+    void testFilterByCurrentStateDateRange_InclusiveBoundary() throws Exception {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime boundary = now.minusDays(5).withNano(0);
+        DebtCase luigi = debtCaseRepository.findAll().stream().filter(c -> c.getDebtorName().equals("Luigi Verdi")).findFirst().orElseThrow();
+        luigi.setCurrentStateDate(boundary);
+        debtCaseRepository.save(luigi);
+
+        mockMvc.perform(get("/cases")
+                .param("currentStateFrom", boundary.toString())
+                .param("currentStateTo", now.plusDays(1).toString())
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$._embedded.cases[*].debtorName", hasItem("Luigi Verdi")));
+    }
+
+    @Test
+    @WithMockUser(username = "testuser", roles = "USER")
+    void testCombinedNotesStateAndDateFilters() throws Exception {
+        LocalDateTime tagDate = LocalDateTime.now().minusDays(7).withNano(0);
+        DebtCase anna = debtCaseRepository.findAll().stream().filter(c -> c.getDebtorName().equals("Anna Bianchi")).findFirst().orElseThrow();
+        anna.setNotes("Pratica sospesa per integrazione documenti");
+        anna.setCurrentStateDate(tagDate);
+        debtCaseRepository.save(anna);
+
+        mockMvc.perform(get("/cases")
+                .param("notes", "integrazione")
+                .param("state", anna.getCurrentState().name())
+                .param("currentStateFrom", tagDate.minusHours(1).toString())
+                .param("currentStateTo", tagDate.plusHours(1).toString())
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$._embedded.cases", hasSize(1)))
+                .andExpect(jsonPath("$._embedded.cases[0].debtorName").value("Anna Bianchi"));
+    }
 }

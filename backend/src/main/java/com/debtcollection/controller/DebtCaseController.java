@@ -42,12 +42,12 @@ public class DebtCaseController {
      * 
      * Supports filtering by:
      * - debtorName: partial search (case-insensitive)
-     * - state: exact match on CaseState
-     * - minAmount/maxAmount: amount range filtering
-     * - hasInstallmentPlan: boolean filter for cases with installment plans
-     * - paid: boolean filter for paid/unpaid cases
-     * - ongoingNegotiations: boolean filter for cases with ongoing negotiations
-     * 
+     * - state / states: stato singolo o lista OR
+     * - minAmount / maxAmount: range importo (inclusivo) con validazione min<=max
+     * - notes: substring case-insensitive
+     * - hasInstallmentPlan / paid / ongoingNegotiations / active
+     * - nextDeadlineFrom/To, currentStateFrom/To, createdFrom/To, lastModifiedFrom/To (range inclusivi per ciascun campo data)
+     *
      * Pagination and Sorting:
      * Spring Boot automatically binds request parameters to Pageable:
      * - page: page number (0-based, default: 0)
@@ -77,10 +77,17 @@ public class DebtCaseController {
      * - Combine filters + sorting for optimal UX
      */
     @GetMapping
-    public ResponseEntity<PagedModel<EntityModel<DebtCaseDto>>> getCases(
+    public ResponseEntity<?> getCases(
             DebtCaseFilterRequest filterRequest,
             Pageable pageable
     ) {
+        if (filterRequest.getMinAmount() != null && filterRequest.getMaxAmount() != null &&
+            filterRequest.getMinAmount().compareTo(filterRequest.getMaxAmount()) > 0) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "message", "L'importo minimo non può essere maggiore dell'importo massimo",
+                "error", "IllegalArgumentException"
+            ));
+        }
         Page<DebtCaseDto> casePage = debtCaseService.findWithFilters(filterRequest, pageable);
         PagedModel<EntityModel<DebtCaseDto>> response = pagedDebtCaseAssembler.toPagedModel(casePage, filterRequest);
         return ResponseEntity.ok(response);

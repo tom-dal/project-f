@@ -5,7 +5,7 @@ import lombok.Data;
 import org.springframework.format.annotation.DateTimeFormat;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -14,34 +14,43 @@ import java.util.List;
  */
 @Data
 public class DebtCaseFilterRequest {
-    
     private String debtorName;
-    
     // USER PREFERENCE: Supporto per filtri multipli su stato con logica OR
-    private CaseState state; // Mantenuto per backward compatibility
-    private List<CaseState> states; // Nuovo campo per filtri multipli OR
+    private CaseState state; // Backward compatibility singolo stato
+    private List<CaseState> states; // Stati multipli OR
 
     private BigDecimal minAmount;
-    
     private BigDecimal maxAmount;
-    
-    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-    private LocalDate fromDate;
-    
-    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-    private LocalDate toDate;
-    
+
+    // CUSTOM IMPLEMENTATION: Notes substring search (case-insensitive)
     private String notes;
-    
-    private String assignedUser;
-    
-    // CUSTOM IMPLEMENTATION: New boolean filters for enhanced business logic
+
+    // USER PREFERENCE: Boolean filters
     private Boolean hasInstallmentPlan;
-    
     private Boolean paid;
-    
     private Boolean ongoingNegotiations;
 
     // USER PREFERENCE: Filtro active per soft delete - frontend invia sempre active=true
     private Boolean active;
+
+    // USER PREFERENCE: Range date dedicati (inclusivi) per i diversi campi data
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+    private LocalDateTime nextDeadlineFrom;
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+    private LocalDateTime nextDeadlineTo;
+
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+    private LocalDateTime currentStateFrom;
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+    private LocalDateTime currentStateTo;
+
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+    private LocalDateTime createdFrom;
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+    private LocalDateTime createdTo;
+
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+    private LocalDateTime lastModifiedFrom;
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+    private LocalDateTime lastModifiedTo;
 }
