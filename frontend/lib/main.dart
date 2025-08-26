@@ -8,6 +8,7 @@ import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'blocs/auth/auth_bloc.dart';
 import 'blocs/debt_case/debt_case_bloc.dart';
+import 'blocs/cases_summary/cases_summary_bloc.dart';
 import 'services/api_service.dart';
 import 'services/config_service.dart';
 
@@ -22,7 +23,7 @@ Future<void> main() async {
   // Carica la configurazione dall'esterno
   await ConfigService.loadConfig();
   
-  runApp(const DebtCollectionApp());
+  runApp(DebtCollectionApp());
 }
 
 class AuthWrapper extends StatefulWidget {
@@ -87,10 +88,19 @@ class _AuthWrapperState extends State<AuthWrapper> {
       builder: (context, state) {
         if (state is AuthAuthenticated && !state.passwordExpired) {
           // Solo se autenticato E la password non è scaduta, mostra la dashboard
-          return BlocProvider(
-            create: (context) => DebtCaseBloc(
-              context.read<ApiService>(),
-            ),
+          return MultiBlocProvider(
+            providers: [
+              BlocProvider(
+                create: (context) => DebtCaseBloc(
+                  context.read<ApiService>(),
+                ),
+              ),
+              BlocProvider(
+                create: (context) => CasesSummaryBloc(
+                  context.read<ApiService>(),
+                )..add(LoadCasesSummary()),
+              ),
+            ],
             child: const DashboardScreen(),
           );
         }
@@ -103,15 +113,16 @@ class _AuthWrapperState extends State<AuthWrapper> {
 }
 
 class DebtCollectionApp extends StatelessWidget {
-  const DebtCollectionApp({super.key});
+  final ApiService apiService; // USER PREFERENCE: Injection per testability
+  DebtCollectionApp({super.key, ApiService? apiService}) : apiService = apiService ?? ApiService();
 
   @override
   Widget build(BuildContext context) {
-    return Provider<ApiService>(
-      create: (_) => ApiService(),
+    return Provider<ApiService>.value(
+      value: apiService,
       child: BlocProvider(
         create: (context) => AuthBloc(
-          apiService: context.read<ApiService>(),
+          apiService: apiService,
         ),
         child: MaterialApp(
           title: 'Debt Collection Manager',
@@ -132,4 +143,4 @@ class DebtCollectionApp extends StatelessWidget {
       ),
     );
   }
-} 
+}

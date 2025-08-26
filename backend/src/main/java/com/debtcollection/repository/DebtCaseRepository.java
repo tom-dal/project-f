@@ -23,4 +23,6 @@ public interface DebtCaseRepository extends MongoRepository<DebtCase, String>, D
     List<DebtCase> findByCurrentState(CaseState state);
     List<DebtCase> findByActiveTrue();
     List<DebtCase> findByActiveTrueOrderByNextDeadlineDateAsc();
+    // CUSTOM IMPLEMENTATION: Query usata per summary dashboard (active=true e stato != COMPLETATA)
+    List<DebtCase> findByActiveTrueAndCurrentStateNot(CaseState state);
 }

@@ -185,9 +185,7 @@ class _CaseDetailsDialogState extends State<CaseDetailsDialog> {
             ] else ...[
               _buildInfoRow('Stato Attuale', _getStateDisplayName(_selectedState)),
               _buildInfoRow('Data Ultimo Stato',
-                  widget.debtCase.lastStateDate != null
-                      ? _dateFormat.format(widget.debtCase.lastStateDate!)
-                      : 'N/A'),
+                  _dateFormat.format(widget.debtCase.lastStateDate)),
             ],
           ],
         ),

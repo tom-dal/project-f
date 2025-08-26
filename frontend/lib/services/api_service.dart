@@ -5,6 +5,7 @@ import '../models/auth.dart';
 import '../models/debt_case.dart';
 import '../models/case_state.dart';
 import '../models/hateoas_response.dart';
+import '../models/cases_summary.dart';
 import 'config_service.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -21,6 +22,7 @@ class ApiService {
   final _authStateController = StreamController<bool>.broadcast();
   final _passwordExpiredController = StreamController<bool>.broadcast();
   bool _passwordChangeRequired = false;
+  final bool _testMode; // USER PREFERENCE: test mode per evitare plugin/network nei widget test
 
   Stream<bool> get authStateStream => _authStateController.stream;
   Stream<bool> get passwordExpiredStream => _passwordExpiredController.stream;
@@ -64,16 +66,21 @@ class ApiService {
     developer.log(message, name: 'ApiService');
   }
 
-  ApiService()
-      : _dio = Dio(BaseOptions(
+  ApiService({bool testMode = false})
+      : _testMode = testMode,
+        _dio = Dio(BaseOptions(
           baseUrl: baseUrl,
           contentType: 'application/json',
-          validateStatus: (status) => true, // Accept all status codes for proper error handling
+          validateStatus: (status) => true,
           headers: {
             'Accept': 'application/json',
           },
         )),
-        _secureStorage = kIsWeb ? null : const FlutterSecureStorage() {
+        _secureStorage = (testMode || kIsWeb) ? null : const FlutterSecureStorage() {
+    if (_testMode) {
+      // In test mode salta storage init e interceptors
+      return;
+    }
     _initStorage();
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
@@ -214,6 +221,7 @@ class ApiService {
   }
 
   Future<String?> getStoredToken() async {
+    if (_testMode) return null; // Nessun token nei test
     if (kIsWeb) {
       await _initStorageIfNeeded();
       final token = _sharedPrefs?.getString(_tokenKey);
@@ -233,6 +241,7 @@ class ApiService {
   }
 
   Future<void> saveToken(String token) async {
+    if (_testMode) return; // Skip salvataggio in test
     developer.log('Saving token to storage');
     if (kIsWeb) {
       await _initStorageIfNeeded();
@@ -245,6 +254,7 @@ class ApiService {
   }
 
   Future<void> deleteToken() async {
+    if (_testMode) return; // Skip delete in test
     if (kIsWeb) {
       await _initStorageIfNeeded();
       await _sharedPrefs?.remove(_tokenKey);
@@ -256,6 +266,11 @@ class ApiService {
   }
 
   Future<bool> validateToken() async {
+    if (_testMode) {
+      _authStateController.add(false);
+      _passwordExpiredController.add(false);
+      return false; // In test consideriamo token non valido => login screen
+    }
     try {
       final token = await getStoredToken();
       _log('🔍 Validating token: ${token != null ? 'Present (${token.substring(0, 20)}...)' : 'Missing'}');
@@ -299,6 +314,7 @@ class ApiService {
 
   // Controlla se il token corrente è un token di cambio password
   Future<bool> isPasswordChangeToken() async {
+    if (_testMode) return false;
     try {
       final token = await getStoredToken();
       if (token == null) return false;
@@ -336,6 +352,10 @@ class ApiService {
   }
 
   Future<AuthResponse> login(String username, String password) async {
+    if (_testMode) {
+      // Simula login fallito (nessuna rete) oppure potremmo simulare successo
+      throw 'Login non disponibile in testMode';
+    }
     try {
       developer.log('Attempting login for user: $username');
       final response = await _dio.post(
@@ -391,6 +411,9 @@ class ApiService {
   }
 
   Future<AuthResponse> changePassword(String oldPassword, String newPassword) async {
+    if (_testMode) {
+      throw 'Change password non disponibile in testMode';
+    }
     try {
       final token = await getStoredToken();
       _log('🔑 Change password - Token: ${token != null ? 'Present (${token.substring(0, 20)}...)' : 'Missing'}');
@@ -887,7 +910,7 @@ class ApiService {
           response.data as Map<String, dynamic>,
           (json) => DebtCase.fromJson(json as Map<String, dynamic>),
         );
-        return hateoasResponse.getItems('cases', (json) => DebtCase.fromJson(json as Map<String, dynamic>));
+        return hateoasResponse.getItems('cases', (json) => DebtCase.fromJson(json));
       } else if (response.statusCode == 401) {
         await _handleUnauthorizedSafely('/cases');
         throw Exception('Authentication required');
@@ -920,7 +943,7 @@ class ApiService {
           response.data as Map<String, dynamic>,
           (json) => DebtCase.fromJson(json as Map<String, dynamic>),
         );
-        return hateoasResponse.getItems('cases', (json) => DebtCase.fromJson(json as Map<String, dynamic>));
+        return hateoasResponse.getItems('cases', (json) => DebtCase.fromJson(json));
       } else if (response.statusCode == 401) {
         await _handleUnauthorizedSafely('/cases');
         throw Exception('Authentication required');
@@ -1099,6 +1122,53 @@ class ApiService {
     } catch (e) {
       _log('❌ Unexpected error registering payment: $e', isError: true);
       throw 'An unexpected error occurred';
+    }
+  }
+
+  // CUSTOM IMPLEMENTATION: Fetch global cases summary for dashboard cards (indipendente dai filtri)
+  Future<CasesSummary> fetchCasesSummary() async {
+    try {
+      _log('📊 Fetching cases summary');
+      final response = await _dio.get(
+        '/cases/summary',
+        options: Options(
+          headers: {
+            'Accept': 'application/json',
+          },
+          validateStatus: (s) => true,
+        ),
+      );
+      _log('📥 Summary response: ${response.statusCode}');
+      if (response.statusCode == 200) {
+        if (response.data is Map<String, dynamic>) {
+          return CasesSummary.fromJson(response.data as Map<String, dynamic>);
+        }
+        if (response.data is Map) {
+          return CasesSummary.fromJson(Map<String, dynamic>.from(response.data as Map));
+        }
+        throw 'Formato risposta non valido';
+      } else if (response.statusCode == 401) {
+        await _handleUnauthorizedSafely('/cases/summary');
+        throw 'Sessione scaduta. Effettua nuovamente il login.';
+      } else {
+        if (response.data is Map) {
+          throw response.data['message'] ?? 'Impossibile ottenere il riepilogo';
+        }
+        throw 'Impossibile ottenere il riepilogo';
+      }
+    } on DioException catch (e) {
+      _log('❌ DioException summary: ${e.message}', isError: true);
+      if (e.response?.statusCode == 401) {
+        await _handleUnauthorizedSafely('/cases/summary');
+        throw 'Sessione scaduta. Effettua nuovamente il login.';
+      } else if (e.type == DioExceptionType.connectionError) {
+        throw 'Errore di connessione. Verifica la tua connessione internet.';
+      } else {
+        throw e.message ?? 'Errore nel recupero del riepilogo';
+      }
+    } catch (e) {
+      if (e is String) rethrow;
+      throw 'Errore imprevisto nel recupero del riepilogo';
     }
   }
 }

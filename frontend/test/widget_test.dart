@@ -9,13 +9,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:frontend/main.dart';
+import 'package:frontend/services/api_service.dart';
+import 'package:frontend/screens/login_screen.dart';
 
 void main() {
   testWidgets('App loads successfully', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const DebtCollectionApp());
+    // Build app with test ApiService (no plugins / network)
+    await tester.pumpWidget(DebtCollectionApp(apiService: ApiService(testMode: true)));
 
-    // Verify that the app loads without error
+    // Let async microtasks (AuthWrapper init) complete
+    await tester.pumpAndSettle();
+
+    // Verify that the app loads and shows login (unauthenticated)
     expect(find.byType(MaterialApp), findsOneWidget);
+    expect(find.byType(LoginScreen), findsOneWidget);
   });
 }

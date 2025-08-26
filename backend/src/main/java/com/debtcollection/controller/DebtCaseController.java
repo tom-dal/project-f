@@ -7,6 +7,7 @@ import com.debtcollection.dto.PaymentDto;
 import com.debtcollection.dto.InstallmentPlanRequest;
 import com.debtcollection.dto.InstallmentPlanResponse;
 import com.debtcollection.dto.InstallmentPaymentRequest;
+import com.debtcollection.dto.CasesSummaryDto;
 import com.debtcollection.model.CaseState;
 import com.debtcollection.service.DebtCaseService;
 import jakarta.validation.Valid;
@@ -206,6 +207,14 @@ public class DebtCaseController {
             return ResponseEntity.badRequest()
                 .body(Map.of("message", e.getMessage(), "error", "RuntimeException"));
         }
+    }
+
+    // CUSTOM IMPLEMENTATION: Endpoint riepilogo globale dashboard (non influenzato dai filtri UI)
+    @GetMapping("/summary")
+    public ResponseEntity<CasesSummaryDto> getCasesSummary(
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        return ResponseEntity.ok(debtCaseService.getCasesSummary());
     }
 
     public record CreateDebtCaseRequest(

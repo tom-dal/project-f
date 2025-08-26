@@ -5,7 +5,7 @@ import com.debtcollection.dto.DebtCaseFilterRequest;
 import com.debtcollection.dto.PaymentDto;
 import com.debtcollection.dto.InstallmentPlanRequest;
 import com.debtcollection.dto.InstallmentPlanResponse;
-import com.debtcollection.dto.InstallmentDto;
+import com.debtcollection.dto.CasesSummaryDto;
 import com.debtcollection.mapper.DebtCaseMapper;
 import com.debtcollection.mapper.PaymentMapper;
 import com.debtcollection.mapper.InstallmentMapper;
@@ -24,8 +24,8 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Map;
 
-// USER PREFERENCE: Migrated from JPA to MongoDB - removed InstallmentRepository, Specification
 @Service
 @RequiredArgsConstructor
 public class DebtCaseService {
@@ -423,5 +423,38 @@ public class DebtCaseService {
                 }
             }
         }
+    }
+
+    public CasesSummaryDto getCasesSummary() {
+        LocalDate today = LocalDate.now();
+        List<DebtCase> activeNotCompleted = debtCaseRepository.findByActiveTrueAndCurrentStateNot(CaseState.COMPLETATA);
+        long totalActiveCases = activeNotCompleted.size();
+
+        long dueToday = activeNotCompleted.stream()
+            .filter(c -> c.getNextDeadlineDate() != null && c.getNextDeadlineDate().toLocalDate().isEqual(today))
+            .count();
+
+        long dueNext7Days = activeNotCompleted.stream()
+            .filter(c -> {
+                if (c.getNextDeadlineDate() == null) return false;
+                LocalDate d = c.getNextDeadlineDate().toLocalDate();
+                return !d.isBefore(today) && !d.isAfter(today.plusDays(7));
+            })
+            .count();
+
+        // Mappa stati (escluso COMPLETATA) con ordine di dichiarazione enum
+        Map<String, Long> stateCounts = new java.util.LinkedHashMap<>();
+        for (CaseState cs : CaseState.values()) {
+            if (cs == CaseState.COMPLETATA) continue;
+            stateCounts.put(cs.name(), 0L);
+        }
+        activeNotCompleted.forEach(c -> stateCounts.computeIfPresent(c.getCurrentState().name(), (k,v) -> v+1));
+
+        return new CasesSummaryDto(
+            totalActiveCases,
+            dueToday,
+            dueNext7Days,
+            stateCounts
+        );
     }
 }
