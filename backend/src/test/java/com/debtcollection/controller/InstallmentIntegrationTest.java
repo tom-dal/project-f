@@ -35,7 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * - Validazione dei dati di input
  * - Gestione degli errori
  *
- * USER PREFERENCE: Per questa fase di sviluppo, utilizzare esclusivamente data.sql sia in produzione che nei test
+ * USER PREFERENCE: Dataset ora inizializzato via DataInitializer MongoDB
  */
 @SpringBootTest
 @AutoConfigureMockMvc

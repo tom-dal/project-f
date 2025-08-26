@@ -22,7 +22,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * USER PREFERENCE: Data initializer for MongoDB to replace data.sql functionality
+ * USER PREFERENCE: Data initializer for MongoDB
  * Initializes test user and sample debt cases when application starts up
  */
 @Component
@@ -71,15 +71,26 @@ public class DataInitializer implements CommandLineRunner {
         List<DebtCase> testCases = new ArrayList<>();
         Random random = new Random(42); // Fixed seed for consistent test data
 
-        // CUSTOM IMPLEMENTATION: Create varied test cases covering all states and scenarios
-        String[] debtorNames = {
-            "Mario Rossi", "Giuseppe Verdi", "Anna Bianchi", "Francesco Neri", "Maria Gialli",
-            "Luigi Ferrari", "Giovanna Romano", "Antonio Ricci", "Elena Conti", "Marco Russo",
-            "Francesca Marino", "Roberto Costa", "Giulia Rizzo", "Andrea Fontana", "Paola Greco",
-            "Davide Bruno", "Chiara Leone", "Stefano Galli", "Valentina Villa", "Matteo Barbieri",
-            "Simona Colombo", "Federico Lombardi", "Alessia Martinelli", "Luca Santoro", "Serena Fiore",
-            "Nicola Marchetti", "Cristina Pellegrini", "Daniele De Luca", "Michela Moretti", "Fabio Gatti"
+        // Generate 100 unique debtor names (deterministic)
+        String[] firstNames = {
+            "Mario","Giuseppe","Anna","Francesco","Maria","Luigi","Giovanna","Antonio","Elena","Marco",
+            "Francesca","Roberto","Giulia","Andrea","Paola","Davide","Chiara","Stefano","Valentina","Matteo",
+            "Simona","Federico","Alessia","Luca","Serena","Nicola","Cristina","Daniele","Michela","Fabio"
         };
+        String[] lastNames = {
+            "Rossi","Verdi","Bianchi","Neri","Ferrari","Romano","Ricci","Conti","Russo","Marino",
+            "Costa","Rizzo","Fontana","Greco","Bruno","Leone","Galli","Villa","Barbieri","Colombo",
+            "Lombardi","Martinelli","Santoro","Fiore","Marchetti","Pellegrini","De Luca","Moretti","Gatti","Esposito"
+        };
+        List<String> uniqueNames = new ArrayList<>();
+        outer: for (String fn : firstNames) {
+            for (String ln : lastNames) {
+                uniqueNames.add(fn + " " + ln);
+                if (uniqueNames.size() == 100) break outer;
+            }
+        }
+        // Shuffle for variety but deterministic due to seed
+        java.util.Collections.shuffle(uniqueNames, random);
 
         CaseState[] states = CaseState.values();
 
@@ -87,15 +98,8 @@ public class DataInitializer implements CommandLineRunner {
         for (int i = 0; i < 100; i++) {
             DebtCase debtCase = new DebtCase();
 
-            // Random debtor name
-            String debtorName = debtorNames[random.nextInt(debtorNames.length)];
-            if (i < debtorNames.length) {
-                // First 30 cases use unique names
-                debtCase.setDebtorName(debtorNames[i % debtorNames.length] + " " + (i + 1));
-            } else {
-                // Remaining cases can have duplicate names (realistic scenario)
-                debtCase.setDebtorName(debtorName + " " + (char)('A' + random.nextInt(3)));
-            }
+            // Debtor name (already unique, no suffixes)
+            debtCase.setDebtorName(uniqueNames.get(i));
 
             // Realistic amounts (€500 to €50,000)
             double amount = 500 + random.nextDouble() * 49500;
@@ -131,14 +135,12 @@ public class DataInitializer implements CommandLineRunner {
             debtCase.setCurrentStateDate(baseDate);
             debtCase.setCreatedDate(baseDate.minusDays(random.nextInt(30)));
             debtCase.setLastModifiedDate(LocalDateTime.now().minusDays(random.nextInt(7)));
-
-            // Set next deadline based on state
             if (state != CaseState.COMPLETATA) {
                 debtCase.setNextDeadlineDate(LocalDateTime.now().plusDays(random.nextInt(60) + 1));
             }
 
             // Installment plan generation (about 25% of cases)
-            boolean createInstallmentPlan = random.nextDouble() < 0.25 && state != CaseState.COMPLETATA; // avoid COMPLETATA for simplicity
+            boolean createInstallmentPlan = random.nextDouble() < 0.25 && state != CaseState.COMPLETATA;
             if (createInstallmentPlan) {
                 int numberOfInstallments = 3 + random.nextInt(6); // 3..8
                 BigDecimal total = BigDecimal.valueOf(debtCase.getOwedAmount());
@@ -149,14 +151,14 @@ public class DataInitializer implements CommandLineRunner {
                     Installment inst = new Installment();
                     inst.setInstallmentId(UUID.randomUUID().toString());
                     inst.setInstallmentNumber(n);
-                    BigDecimal installmentAmount = (n == numberOfInstallments) ? total.subtract(accumulated) : base; // last catches remainder
+                    BigDecimal installmentAmount = (n == numberOfInstallments) ? total.subtract(accumulated) : base;
                     if (installmentAmount.compareTo(BigDecimal.ZERO) <= 0) {
                         installmentAmount = BigDecimal.valueOf(1.00);
                     }
                     inst.setAmount(installmentAmount);
                     accumulated = accumulated.add(installmentAmount);
                     inst.setDueDate(LocalDateTime.now().plusMonths(n));
-                    inst.setPaid(false); // leave unpaid to avoid needing payments
+                    inst.setPaid(false);
                     inst.setCreatedDate(LocalDateTime.now());
                     inst.setLastModifiedDate(LocalDateTime.now());
                     inst.setCreatedBy("system");
@@ -164,15 +166,13 @@ public class DataInitializer implements CommandLineRunner {
                     installments.add(inst);
                 }
                 debtCase.setInstallments(installments);
-                debtCase.setHasInstallmentPlan(true); // CUSTOM IMPLEMENTATION: real installment plan present
+                debtCase.setHasInstallmentPlan(true);
             } else {
                 debtCase.setHasInstallmentPlan(false);
             }
 
-            // Random flags for variety (negotiations)
             debtCase.setOngoingNegotiations(random.nextBoolean() && random.nextDouble() < 0.3);
-            // Paid flag: only mark COMPLETATA with true occasionally and leave installments logic separate
-            boolean markPaid = state == CaseState.COMPLETATA && random.nextDouble() < 0.6; // 60% of completed cases
+            boolean markPaid = state == CaseState.COMPLETATA && random.nextDouble() < 0.6;
             debtCase.setPaid(markPaid ? Boolean.TRUE : Boolean.FALSE);
             if (Boolean.TRUE.equals(debtCase.getPaid())) {
                 var payment = new Payment();
@@ -184,8 +184,7 @@ public class DataInitializer implements CommandLineRunner {
                 debtCase.getPayments().add(payment);
             }
 
-            // Add notes for some cases
-            if (random.nextDouble() < 0.4) { // 40% of cases have notes
+            if (random.nextDouble() < 0.4) {
                 String[] noteTemplates = {
                     "Contattato debitore via telefono",
                     "Inviata comunicazione tramite PEC",

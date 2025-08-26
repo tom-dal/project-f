@@ -58,7 +58,13 @@ class JwtTokenProviderTest {
     @Test
     void tamperedSignature_notValid() {
         String token = provider.generateToken(auth);
-        String tampered = token.substring(0, token.length() - 1) + (token.endsWith("a") ? 'b' : 'a');
+        String[] parts = token.split("\\.");
+        String sig = parts[2];
+        // Change first character of signature segment to ensure signature mismatch
+        char first = sig.charAt(0);
+        char replacement = first != 'a' ? 'a' : 'b';
+        sig = replacement + sig.substring(1);
+        String tampered = parts[0] + "." + parts[1] + "." + sig;
         assertFalse(provider.validateToken(tampered));
     }
 
