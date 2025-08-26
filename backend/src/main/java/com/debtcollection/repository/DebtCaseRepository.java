@@ -21,8 +21,7 @@ public interface DebtCaseRepository extends MongoRepository<DebtCase, String>, D
 
     // USER PREFERENCE: Spring Data MongoDB automatically provides query methods
     List<DebtCase> findByCurrentState(CaseState state);
-    List<DebtCase> findByActiveTrue();
-    List<DebtCase> findByActiveTrueOrderByNextDeadlineDateAsc();
-    // CUSTOM IMPLEMENTATION: Query usata per summary dashboard (active=true e stato != COMPLETATA)
-    List<DebtCase> findByActiveTrueAndCurrentStateNot(CaseState state);
+
+    // Method used by summary query (excludes COMPLETATA)
+    List<DebtCase> findByCurrentStateNot(CaseState state);
 }

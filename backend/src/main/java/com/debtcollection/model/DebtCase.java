@@ -19,14 +19,6 @@ import java.util.ArrayList;
 @NoArgsConstructor
 // USER PREFERENCE: MongoDB compound indexes for optimizing common queries in debt collection system
 @CompoundIndexes({
-    // Main indexes for active field (soft delete)
-    @CompoundIndex(name = "idx_debt_case_active", def = "{'active': 1}"),
-    @CompoundIndex(name = "idx_debt_case_active_state", def = "{'active': 1, 'currentState': 1}"),
-
-    // USER PREFERENCE: Critical index for deadlines on active cases
-    @CompoundIndex(name = "idx_debt_case_active_deadline", def = "{'active': 1, 'nextDeadlineDate': 1}"),
-    @CompoundIndex(name = "idx_debt_case_active_state_deadline", def = "{'active': 1, 'currentState': 1, 'nextDeadlineDate': 1}"),
-
     // Single indexes for backward compatibility
     @CompoundIndex(name = "idx_debt_case_state", def = "{'currentState': 1}"),
     @CompoundIndex(name = "idx_debt_case_deadline", def = "{'nextDeadlineDate': 1}")
@@ -60,8 +52,6 @@ public class DebtCase {
 
     private Boolean paid = false;
 
-    // USER PREFERENCE: Field to indicate if the case is active or not (soft delete)
-    private Boolean active = true;
 
     private String notes;
 

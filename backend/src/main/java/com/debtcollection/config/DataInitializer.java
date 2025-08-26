@@ -197,9 +197,6 @@ public class DataInitializer implements CommandLineRunner {
                 debtCase.setNotes(noteTemplates[random.nextInt(noteTemplates.length)]);
             }
 
-            // All cases are active by default
-            debtCase.setActive(true);
-
             testCases.add(debtCase);
         }
 

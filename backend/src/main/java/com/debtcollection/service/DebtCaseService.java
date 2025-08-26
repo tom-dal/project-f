@@ -169,7 +169,6 @@ public class DebtCaseService {
             filterRequest.getHasInstallmentPlan(),
             filterRequest.getPaid(),
             filterRequest.getOngoingNegotiations(),
-            filterRequest.getActive(),
             filterRequest.getNotes(),
             filterRequest.getNextDeadlineFrom(),
             filterRequest.getNextDeadlineTo(),
@@ -427,14 +426,14 @@ public class DebtCaseService {
 
     public CasesSummaryDto getCasesSummary() {
         LocalDate today = LocalDate.now();
-        List<DebtCase> activeNotCompleted = debtCaseRepository.findByActiveTrueAndCurrentStateNot(CaseState.COMPLETATA);
-        long totalActiveCases = activeNotCompleted.size();
+        List<DebtCase> notCompleted = debtCaseRepository.findByCurrentStateNot(CaseState.COMPLETATA);
+        long totalActiveCases = notCompleted.size();
 
-        long dueToday = activeNotCompleted.stream()
+        long dueToday = notCompleted.stream()
             .filter(c -> c.getNextDeadlineDate() != null && c.getNextDeadlineDate().toLocalDate().isEqual(today))
             .count();
 
-        long dueNext7Days = activeNotCompleted.stream()
+        long dueNext7Days = notCompleted.stream()
             .filter(c -> {
                 if (c.getNextDeadlineDate() == null) return false;
                 LocalDate d = c.getNextDeadlineDate().toLocalDate();
@@ -442,13 +441,12 @@ public class DebtCaseService {
             })
             .count();
 
-        // Mappa stati (escluso COMPLETATA) con ordine di dichiarazione enum
         Map<String, Long> stateCounts = new java.util.LinkedHashMap<>();
         for (CaseState cs : CaseState.values()) {
             if (cs == CaseState.COMPLETATA) continue;
             stateCounts.put(cs.name(), 0L);
         }
-        activeNotCompleted.forEach(c -> stateCounts.computeIfPresent(c.getCurrentState().name(), (k,v) -> v+1));
+        notCompleted.forEach(c -> stateCounts.computeIfPresent(c.getCurrentState().name(), (k,v) -> v+1));
 
         return new CasesSummaryDto(
             totalActiveCases,

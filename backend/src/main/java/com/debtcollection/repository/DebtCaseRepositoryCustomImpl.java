@@ -36,7 +36,6 @@ public class DebtCaseRepositoryCustomImpl implements DebtCaseRepositoryCustom {
             Boolean hasInstallmentPlan,
             Boolean paid,
             Boolean ongoingNegotiations,
-            Boolean active,
             String notes,
             LocalDateTime nextDeadlineFrom,
             LocalDateTime nextDeadlineTo,
@@ -78,12 +77,6 @@ public class DebtCaseRepositoryCustomImpl implements DebtCaseRepositoryCustom {
         }
         if (ongoingNegotiations != null) {
             criteria.and("ongoingNegotiations").is(ongoingNegotiations);
-        }
-
-        if (active != null) {
-            criteria.and("active").is(active);
-        } else {
-            criteria.and("active").is(true); // USER PREFERENCE: default active=true
         }
 
         // Notes substring case-insensitive

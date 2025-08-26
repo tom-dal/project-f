@@ -42,7 +42,7 @@ class DebtCaseControllerFiltersIntegrationTest {
     private DebtCaseService debtCaseService;
 
     @Autowired
-    private DebtCaseRepository debtCaseRepository; // used only where service does not expose a setter (active flag)
+    private DebtCaseRepository debtCaseRepository; // used only where service layer missing specific helpers
 
     @Autowired
     private StateTransitionConfigRepository stateTransitionConfigRepository; // Needed to seed transitions
@@ -50,7 +50,7 @@ class DebtCaseControllerFiltersIntegrationTest {
     private String alphaId; // MESSA_IN_MORA_DA_FARE
     private String betaId;  // DEPOSITO_RICORSO
     private String gammaId; // PRECETTO
-    private String deltaId; // COMPLETATA (inactive)
+    private String deltaId; // COMPLETATA
 
     private LocalDateTime betaNextDeadline;
     private LocalDateTime gammaNextDeadline;
@@ -59,9 +59,8 @@ class DebtCaseControllerFiltersIntegrationTest {
     void setup() {
         debtCaseRepository.deleteAll();
         stateTransitionConfigRepository.deleteAll();
-        createStateTransitionConfigs(); // Seed required transitions before using service
+        createStateTransitionConfigs();
 
-        // Create base cases via service (USER PREFERENCE: use service where possible)
         alphaId = debtCaseService.createDebtCase("Filter Alpha", CaseState.MESSA_IN_MORA_DA_FARE, null, new BigDecimal("1000.00")).getId();
         betaId  = debtCaseService.createDebtCase("Filter Beta",  CaseState.DEPOSITO_RICORSO, null, new BigDecimal("2000.00")).getId();
         gammaId = debtCaseService.createDebtCase("Filter Gamma", CaseState.PRECETTO, null, new BigDecimal("3000.00")).getId();
@@ -83,10 +82,9 @@ class DebtCaseControllerFiltersIntegrationTest {
         gammaNextDeadline = LocalDateTime.now().plusDays(10);
         debtCaseService.updateDebtCase(gammaId, null, null, null, gammaNextDeadline, false, null, false, null, null);
 
-        // Mark Delta inactive directly (no service method available)
-        DebtCase delta = debtCaseRepository.findById(deltaId).orElseThrow();
-        delta.setActive(false); // USER PREFERENCE: default active true overridden for inactive filter test
-        debtCaseRepository.save(delta);
+        // Aggiunge un pagamento totale a Delta e poi marca paid=true coerentemente
+        debtCaseService.registerPayment(deltaId, new BigDecimal("4000.00"), LocalDateTime.now());
+        debtCaseService.updateDebtCase(deltaId, null, null, null, null, null, null, true, null, null);
     }
 
     private void createStateTransitionConfigs() {
@@ -135,9 +133,9 @@ class DebtCaseControllerFiltersIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON))
                 .andDo(print())
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$._embedded.cases", hasSize(1)))
-                .andExpect(jsonPath("$._embedded.cases[0].debtorName", is("Filter Gamma")))
-                .andExpect(jsonPath("$.page.totalElements", is(1)));
+                .andExpect(jsonPath("$._embedded.cases", hasSize(2)))
+                .andExpect(jsonPath("$._embedded.cases[*].debtorName", containsInAnyOrder("Filter Gamma", "Filter Delta")))
+                .andExpect(jsonPath("$.page.totalElements", is(2)));
     }
 
     @Test
@@ -174,7 +172,7 @@ class DebtCaseControllerFiltersIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON))
                 .andDo(print())
                 .andExpect(status().isOk())
-                // active=true default, so 3 active unpaid cases
+                // Delta è paid=true quindi esclusa: rimangono 3 unpaid cases
                 .andExpect(jsonPath("$._embedded.cases", hasSize(3)))
                 .andExpect(jsonPath("$._embedded.cases[*].debtorName", containsInAnyOrder("Filter Alpha", "Filter Beta", "Filter Gamma")))
                 .andExpect(jsonPath("$.page.totalElements", is(3)));
@@ -190,19 +188,6 @@ class DebtCaseControllerFiltersIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$._embedded.cases", hasSize(1)))
                 .andExpect(jsonPath("$._embedded.cases[0].debtorName", is("Filter Beta")))
-                .andExpect(jsonPath("$.page.totalElements", is(1)));
-    }
-
-    @Test
-    @WithMockUser(username = "user", roles = "USER")
-    void filterActiveFalse() throws Exception {
-        mockMvc.perform(get("/cases")
-                .param("active", "false")
-                .contentType(MediaType.APPLICATION_JSON))
-                .andDo(print())
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$._embedded.cases", hasSize(1)))
-                .andExpect(jsonPath("$._embedded.cases[0].debtorName", is("Filter Delta")))
                 .andExpect(jsonPath("$.page.totalElements", is(1)));
     }
 

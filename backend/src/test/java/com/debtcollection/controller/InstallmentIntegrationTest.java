@@ -78,7 +78,7 @@ public class InstallmentIntegrationTest {
         testCase.setHasInstallmentPlan(false);
         testCase.setPaid(false);
         testCase.setOngoingNegotiations(false);
-        testCase.setActive(true);
+        // Removed setActive(true)
 
         DebtCase savedCase = debtCaseRepository.save(testCase);
         testDebtCaseId = savedCase.getId();

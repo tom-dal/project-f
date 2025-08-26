@@ -46,7 +46,7 @@ public class DebtCaseController {
      * - state / states: stato singolo o lista OR
      * - minAmount / maxAmount: range importo (inclusivo) con validazione min<=max
      * - notes: substring case-insensitive
-     * - hasInstallmentPlan / paid / ongoingNegotiations / active
+     * - hasInstallmentPlan / paid / ongoingNegotiations
      * - nextDeadlineFrom/To, currentStateFrom/To, createdFrom/To, lastModifiedFrom/To (range inclusivi per ciascun campo data)
      *
      * Pagination and Sorting:
@@ -56,15 +56,15 @@ public class DebtCaseController {
      * - sort: sort criteria (format: property,direction e.g., "nextDeadlineDate,asc")
      * 
      * AVAILABLE SORTING FIELDS (Frontend Reference):
-     * - debtorName: alphabetical sorting
-     * - owedAmount: amount-based priority
-     * - currentState: state-based grouping
-     * - currentStateDate: recent activity first
-     * - nextDeadlineDate: urgency-based (RECOMMENDED default)
-     * - ongoingNegotiations: active negotiations first
-     * - hasInstallmentPlan: installment cases grouping
-     * - paid: payment status grouping
-     * 
+     * - debtorName
+     * - owedAmount
+     * - currentState
+     * - currentStateDate
+     * - nextDeadlineDate
+     * - ongoingNegotiations
+     * - hasInstallmentPlan
+     * - paid
+     *
      * Examples:
      * - /api/v1/cases?page=0&size=10&sort=nextDeadlineDate,asc (urgent first)
      * - /api/v1/cases?paid=false&sort=owedAmount,desc (unpaid, high amounts)

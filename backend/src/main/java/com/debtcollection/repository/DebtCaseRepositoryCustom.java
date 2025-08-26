@@ -28,7 +28,6 @@ public interface DebtCaseRepositoryCustom {
         Boolean hasInstallmentPlan,
         Boolean paid,
         Boolean ongoingNegotiations,
-        Boolean active,              // Soft delete
         String notes,
         // Date ranges (inclusive)
         LocalDateTime nextDeadlineFrom,

@@ -59,7 +59,6 @@ public class DebtCasePaginationIntegrationTest {
             debtCase.setHasInstallmentPlan(false);
             debtCase.setPaid(false);
             debtCase.setOngoingNegotiations(false);
-            debtCase.setActive(true);
             debtCaseRepository.save(debtCase);
         }
     }

@@ -30,9 +30,6 @@ public class DebtCaseFilterRequest {
     private Boolean paid;
     private Boolean ongoingNegotiations;
 
-    // USER PREFERENCE: Filtro active per soft delete - frontend invia sempre active=true
-    private Boolean active;
-
     // USER PREFERENCE: Range date dedicati (inclusivi) per i diversi campi data
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
     private LocalDateTime nextDeadlineFrom;

@@ -42,40 +42,32 @@ public class DebtCaseSummaryIntegrationTest {
         debtCaseRepository.deleteAll();
         LocalDate today = LocalDate.now();
 
-        // Caso 1: deadline oggi
         DebtCase c1 = new DebtCase();
         c1.setDebtorName("Deadline Oggi");
         c1.setCurrentState(CaseState.MESSA_IN_MORA_DA_FARE);
         c1.setCurrentStateDate(LocalDateTime.now());
         c1.setNextDeadlineDate(today.atStartOfDay());
-        c1.setActive(true);
         debtCaseRepository.save(c1);
 
-        // Caso 2: deadline tra 3 giorni
         DebtCase c2 = new DebtCase();
         c2.setDebtorName("Deadline +3");
         c2.setCurrentState(CaseState.DEPOSITO_RICORSO);
         c2.setCurrentStateDate(LocalDateTime.now());
         c2.setNextDeadlineDate(today.plusDays(3).atStartOfDay());
-        c2.setActive(true);
         debtCaseRepository.save(c2);
 
-        // Caso 3: deadline tra 10 giorni (fuori intervallo 7 giorni)
         DebtCase c3 = new DebtCase();
         c3.setDebtorName("Deadline +10");
         c3.setCurrentState(CaseState.PRECETTO);
         c3.setCurrentStateDate(LocalDateTime.now());
         c3.setNextDeadlineDate(today.plusDays(10).atStartOfDay());
-        c3.setActive(true);
         debtCaseRepository.save(c3);
 
-        // Caso 4: COMPLETATA (da escludere)
         DebtCase c4 = new DebtCase();
         c4.setDebtorName("Completata");
         c4.setCurrentState(CaseState.COMPLETATA);
         c4.setCurrentStateDate(LocalDateTime.now());
         c4.setNextDeadlineDate(today.atStartOfDay());
-        c4.setActive(true);
         debtCaseRepository.save(c4);
     }
 
@@ -95,4 +87,3 @@ public class DebtCaseSummaryIntegrationTest {
             .andExpect(jsonPath("$.states.COMPLETATA").doesNotExist());
     }
 }
-

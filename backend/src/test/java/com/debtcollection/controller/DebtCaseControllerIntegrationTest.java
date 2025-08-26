@@ -87,7 +87,6 @@ public class DebtCaseControllerIntegrationTest {
         case1.setHasInstallmentPlan(false);
         case1.setPaid(false);
         case1.setOngoingNegotiations(false);
-        case1.setActive(true);
         DebtCase savedCase1 = debtCaseRepository.save(case1);
 
         // Caso 2: Luigi Verdi, importo 2500, stato DEPOSITO_RICORSO
@@ -99,7 +98,6 @@ public class DebtCaseControllerIntegrationTest {
         case2.setHasInstallmentPlan(false);
         case2.setPaid(false);
         case2.setOngoingNegotiations(false);
-        case2.setActive(true);
         DebtCase savedCase2 = debtCaseRepository.save(case2);
 
         // Caso 3: Anna Bianchi, importo 500, stato COMPLETATA (ma non pagata)
@@ -111,7 +109,6 @@ public class DebtCaseControllerIntegrationTest {
         case3.setHasInstallmentPlan(false);
         case3.setPaid(false); // USER PREFERENCE: Changed to false to avoid validation error without payments
         case3.setOngoingNegotiations(false);
-        case3.setActive(true);
         DebtCase savedCase3 = debtCaseRepository.save(case3);
 
         // Caso 4: Gianni Neri, importo 3000, stato MESSA_IN_MORA_DA_FARE
@@ -123,7 +120,6 @@ public class DebtCaseControllerIntegrationTest {
         case4.setHasInstallmentPlan(false);
         case4.setPaid(false);
         case4.setOngoingNegotiations(false);
-        case4.setActive(true);
         DebtCase savedCase4 = debtCaseRepository.save(case4);
 
         // USER PREFERENCE: Force MongoDB to flush changes and wait for persistence
@@ -270,16 +266,14 @@ public class DebtCaseControllerIntegrationTest {
         List<DebtCase> messaInMoraCases = debtCaseRepository.findAll().stream()
                 .filter(c -> c.getCurrentState() == CaseState.MESSA_IN_MORA_DA_FARE)
                 .filter(c -> c.getOwedAmount() >= 500.00) // USER PREFERENCE: Compare Double values directly for MongoDB
-                .filter(c -> Boolean.TRUE.equals(c.getActive()))
                 .toList();
 
         System.out.println("Cases matching criteria: " + messaInMoraCases.size());
-        messaInMoraCases.forEach(c -> System.out.println("- " + c.getDebtorName() + ": " + c.getOwedAmount() + " (active: " + c.getActive() + ")"));
+        messaInMoraCases.forEach(c -> System.out.println("- " + c.getDebtorName() + ": " + c.getOwedAmount()));
 
         mockMvc.perform(get("/cases")
                 .param("state", "MESSA_IN_MORA_DA_FARE")
                 .param("minAmount", "500")
-                .param("active", "true")  // USER PREFERENCE: Explicit active filter to match repository logic
                 .contentType(MediaType.APPLICATION_JSON))
                 .andDo(print())
                 .andExpect(status().isOk())
