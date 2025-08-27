@@ -11,6 +11,7 @@ import 'blocs/debt_case/debt_case_bloc.dart';
 import 'blocs/cases_summary/cases_summary_bloc.dart';
 import 'services/api_service.dart';
 import 'services/config_service.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -126,6 +127,16 @@ class DebtCollectionApp extends StatelessWidget {
         ),
         child: MaterialApp(
           title: 'Debt Collection Manager',
+          // Rimossa locale forzata: usa locale di sistema
+          localizationsDelegates: [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [
+            Locale('it'),
+            Locale('en'),
+          ],
           theme: ThemeData(
             colorScheme: ColorScheme.fromSeed(
               seedColor: Colors.blue,

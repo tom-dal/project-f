@@ -593,34 +593,47 @@ class ApiService {
     String? sort,
     String? debtorName,
     CaseState? state,
+    List<CaseState>? states, // USER PREFERENCE: multi-state filter OR logic
     double? minAmount,
     double? maxAmount,
     bool? hasInstallmentPlan,
     bool? paid,
     bool? ongoingNegotiations,
+    DateTime? nextDeadlineFrom, // USER PREFERENCE: deadline range filter from
+    DateTime? nextDeadlineTo,   // USER PREFERENCE: deadline range filter to (inclusive)
   }) async {
     try {
       _log('🔍 Getting paginated cases - Page: $page, Size: $size (Active filter: hidden)');
 
-      final queryParams = <String, dynamic>{
-        'page': page,
-        'size': size,
-        // USER PREFERENCE: Filtro nascosto - mostra sempre solo pratiche attive
-        'active': true,
+      final baseParams = <String, String>{
+        'page': '$page',
+        'size': '$size',
+        'active': 'true',
       };
-      
-      if (sort != null) queryParams['sort'] = sort;
-      if (debtorName != null) queryParams['debtorName'] = debtorName;
-      if (state != null) queryParams['state'] = _caseStateToJson(state);
-      if (minAmount != null) queryParams['minAmount'] = minAmount;
-      if (maxAmount != null) queryParams['maxAmount'] = maxAmount;
-      if (hasInstallmentPlan != null) queryParams['hasInstallmentPlan'] = hasInstallmentPlan;
-      if (paid != null) queryParams['paid'] = paid;
-      if (ongoingNegotiations != null) queryParams['ongoingNegotiations'] = ongoingNegotiations;
+      if (sort != null) baseParams['sort'] = sort;
+      if (debtorName != null && debtorName.trim().isNotEmpty) baseParams['debtorName'] = debtorName.trim();
+      if (state != null) baseParams['state'] = _caseStateToJson(state); // backward compatibility
+      if (minAmount != null) baseParams['minAmount'] = '$minAmount';
+      if (maxAmount != null) baseParams['maxAmount'] = '$maxAmount';
+      if (hasInstallmentPlan != null) baseParams['hasInstallmentPlan'] = '$hasInstallmentPlan';
+      if (paid != null) baseParams['paid'] = '$paid';
+      if (ongoingNegotiations != null) baseParams['ongoingNegotiations'] = '$ongoingNegotiations';
+      if (nextDeadlineFrom != null) baseParams['nextDeadlineFrom'] = nextDeadlineFrom.toIso8601String();
+      if (nextDeadlineTo != null) baseParams['nextDeadlineTo'] = nextDeadlineTo.toIso8601String();
+
+      // Build query string manually to control list format (states=VAL&states=VAL2)
+      final parts = <String>[];
+      baseParams.forEach((k, v) => parts.add('${Uri.encodeQueryComponent(k)}=${Uri.encodeQueryComponent(v)}'));
+      if (states != null && states.isNotEmpty) {
+        for (final s in states) {
+          parts.add('states=${Uri.encodeQueryComponent(_caseStateToJson(s))}');
+        }
+      }
+      final queryString = parts.join('&');
+      final url = '/cases${queryString.isNotEmpty ? '?$queryString' : ''}';
 
       final response = await _dio.get(
-        '/cases',
-        queryParameters: queryParams,
+        url,
         options: Options(
           headers: {
             'Accept': 'application/hal+json',

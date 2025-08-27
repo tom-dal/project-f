@@ -17,7 +17,11 @@ class LoadCasesPaginated extends DebtCaseEvent {
   final int size;
   final String? sort;
   final String? debtorName;
-  final CaseState? state;
+  final CaseState? state; // backward compatibility single state
+  final List<CaseState>? states; // USER PREFERENCE: multi-state OR filter
+  final DateTime? nextDeadlineFrom; // USER PREFERENCE: deadline range from
+  final DateTime? nextDeadlineTo;   // USER PREFERENCE: deadline range to (inclusive)
+  final bool showFullLoading; // USER PREFERENCE: evita spinner centrale per refresh filtri
 
   const LoadCasesPaginated({
     this.page = 0,
@@ -25,10 +29,14 @@ class LoadCasesPaginated extends DebtCaseEvent {
     this.sort,
     this.debtorName,
     this.state,
+    this.states,
+    this.nextDeadlineFrom,
+    this.nextDeadlineTo,
+    this.showFullLoading = true,
   });
 
   @override
-  List<Object?> get props => [page, size, sort, debtorName, state];
+  List<Object?> get props => [page, size, sort, debtorName, state, states, nextDeadlineFrom, nextDeadlineTo, showFullLoading];
 }
 
 class CreateDebtCase extends DebtCaseEvent {
@@ -149,7 +157,10 @@ class DebtCaseBloc extends Bloc<DebtCaseEvent, DebtCaseState> {
     LoadCasesPaginated event,
     Emitter<DebtCaseState> emit,
   ) async {
-    emit(DebtCaseLoading());
+    final current = state;
+    if (event.showFullLoading || current is! DebtCasePaginatedLoaded) {
+      emit(DebtCaseLoading());
+    }
     try {
       final paginatedResponse = await _apiService.getAllCasesPaginated(
         page: event.page,
@@ -157,6 +168,9 @@ class DebtCaseBloc extends Bloc<DebtCaseEvent, DebtCaseState> {
         sort: event.sort,
         debtorName: event.debtorName,
         state: event.state,
+        states: event.states, // multi-state support
+        nextDeadlineFrom: event.nextDeadlineFrom,
+        nextDeadlineTo: event.nextDeadlineTo,
       );
 
       final cases = paginatedResponse.getItems('cases', (json) => DebtCase.fromJson(json));
