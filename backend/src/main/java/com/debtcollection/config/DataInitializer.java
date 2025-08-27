@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors; // added for post-processing
 
 /**
  * USER PREFERENCE: Data initializer for MongoDB
@@ -200,6 +201,9 @@ public class DataInitializer implements CommandLineRunner {
             testCases.add(debtCase);
         }
 
+        // USER PREFERENCE: Post-elaboration to enforce 20% expired cases (half with installment plan, half without)
+        applyExpiredCasesScenario(testCases);
+
         // Save all test cases
         debtCaseRepository.saveAll(testCases);
 
@@ -212,5 +216,114 @@ public class DataInitializer implements CommandLineRunner {
         log.info("💰 Amount range: €{} - €{}",
             testCases.stream().mapToDouble(DebtCase::getOwedAmount).min().orElse(0),
             testCases.stream().mapToDouble(DebtCase::getOwedAmount).max().orElse(0));
+    }
+
+    // CUSTOM IMPLEMENTATION: Enforce deterministic scenario of expired deadlines
+    private void applyExpiredCasesScenario(List<DebtCase> testCases) {
+        if (testCases.isEmpty()) return;
+        // Consider only non-completed cases to mark as expired
+        List<DebtCase> candidates = testCases.stream()
+            .filter(c -> c.getCurrentState() != CaseState.COMPLETATA)
+            .collect(Collectors.toList());
+        if (candidates.isEmpty()) return;
+
+        int total = testCases.size();
+        int desiredExpired = Math.max(1, (int)Math.round(total * 0.20)); // 20%
+        if (desiredExpired > candidates.size()) desiredExpired = candidates.size();
+        int expiredWithPlan = desiredExpired / 2; // half with installment plan
+        int expiredWithoutPlan = desiredExpired - expiredWithPlan; // remaining without plan
+
+        // Slice deterministic subsets
+        List<DebtCase> expiredPlanSubset = candidates.subList(0, Math.min(expiredWithPlan, candidates.size()));
+        List<DebtCase> expiredNoPlanSubset = candidates.subList(Math.min(expiredWithPlan, candidates.size()), Math.min(expiredWithPlan + expiredWithoutPlan, candidates.size()));
+
+        LocalDateTime now = LocalDateTime.now();
+        // Configure expired WITHOUT plan
+        for (DebtCase c : expiredNoPlanSubset) {
+            c.setHasInstallmentPlan(false);
+            c.getInstallments().clear();
+            // past deadline between 1 and 30 days ago (deterministic using hash of id or name)
+            int offset = Math.abs(c.getDebtorName().hashCode()) % 30 + 1;
+            c.setNextDeadlineDate(now.minusDays(offset));
+            c.setPaid(Boolean.FALSE); // ensure not fully paid
+        }
+
+        // Configure expired WITH plan
+        int index = 0;
+        for (DebtCase c : expiredPlanSubset) {
+            // Build a deterministic installment plan overriding any existing
+            List<Installment> plan = new ArrayList<>();
+            // Decide variation pattern
+            int pattern = index % 3; // 0: multiple overdue unpaid, 1: mix paid+overdue, 2: single overdue
+            BigDecimal totalAmount = BigDecimal.valueOf(c.getOwedAmount() != null ? c.getOwedAmount() : 1000.0);
+            BigDecimal part = totalAmount.divide(BigDecimal.valueOf(5), 2, java.math.RoundingMode.DOWN);
+            BigDecimal accumulated = BigDecimal.ZERO;
+            for (int n = 1; n <= 5; n++) {
+                Installment inst = new Installment();
+                inst.setInstallmentId(UUID.randomUUID().toString());
+                inst.setInstallmentNumber(n);
+                BigDecimal amount = (n == 5) ? totalAmount.subtract(accumulated) : part;
+                if (amount.compareTo(BigDecimal.ZERO) <= 0) amount = BigDecimal.valueOf(1.00);
+                inst.setAmount(amount);
+                accumulated = accumulated.add(amount);
+                // Determine due dates based on pattern
+                LocalDateTime due;
+                switch (pattern) {
+                    case 0 -> { // multiple overdue unpaid
+                        if (n <= 3) {
+                            int daysAgo = 40 - (n * 10); // 30,20,10 days ago pattern adjusted
+                            due = now.minusDays(daysAgo);
+                        } else {
+                            due = now.plusDays((n - 3) * 20L); // future
+                        }
+                        inst.setPaid(false);
+                    }
+                    case 1 -> { // mix paid + overdue
+                        if (n == 1) {
+                            due = now.minusDays(40);
+                            inst.setPaid(true);
+                            inst.setPaidDate(now.minusDays(35));
+                            inst.setPaidAmount(amount);
+                        } else if (n == 2) {
+                            due = now.minusDays(10); // overdue unpaid
+                            inst.setPaid(false);
+                        } else {
+                            due = now.plusDays(n * 15L); // future
+                            inst.setPaid(false);
+                        }
+                    }
+                    default -> { // pattern 2 single overdue
+                        if (n == 1) {
+                            due = now.minusDays(7); // only first overdue
+                            inst.setPaid(false);
+                        } else {
+                            due = now.plusDays(n * 20L);
+                            inst.setPaid(false);
+                        }
+                    }
+                }
+                inst.setDueDate(due);
+                inst.setCreatedDate(now.minusDays(1));
+                inst.setLastModifiedDate(now.minusHours(1));
+                inst.setCreatedBy("system");
+                inst.setLastModifiedBy("system");
+                plan.add(inst);
+            }
+            c.setInstallments(plan);
+            c.setHasInstallmentPlan(true);
+            c.setPaid(Boolean.FALSE); // ensure case itself not fully paid
+            // nextDeadlineDate set to earliest overdue unpaid installment (past)
+            LocalDateTime earliestPast = plan.stream()
+                .filter(inst -> Boolean.FALSE.equals(inst.getPaid()) && inst.getDueDate().isBefore(now))
+                .map(Installment::getDueDate)
+                .sorted()
+                .findFirst()
+                .orElse(now.minusDays(5));
+            c.setNextDeadlineDate(earliestPast); // past to mark expired
+            index++;
+        }
+
+        log.info("📌 Applied expired scenario: totalExpired={}, withPlan={}, withoutPlan={}",
+            expiredPlanSubset.size() + expiredNoPlanSubset.size(), expiredPlanSubset.size(), expiredNoPlanSubset.size());
     }
 }

@@ -7,13 +7,10 @@ import org.springframework.data.mongodb.core.mapping.Field;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-// USER PREFERENCE: Migrated from JPA @Entity to MongoDB embedded document
-// No longer a separate collection - embedded in DebtCase
 @Data
 @NoArgsConstructor
 public class Installment {
 
-    // USER PREFERENCE: No @Id needed - embedded document, using installmentId for internal reference
     private String installmentId; // Internal ID for referencing within the embedded array
 
     @Field("installment_number")

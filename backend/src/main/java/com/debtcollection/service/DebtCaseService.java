@@ -429,6 +429,10 @@ public class DebtCaseService {
         List<DebtCase> notCompleted = debtCaseRepository.findByCurrentStateNot(CaseState.COMPLETATA);
         long totalActiveCases = notCompleted.size();
 
+        long overdue = notCompleted.stream()
+            .filter(c -> c.getNextDeadlineDate() != null && c.getNextDeadlineDate().toLocalDate().isBefore(today))
+            .count();
+
         long dueToday = notCompleted.stream()
             .filter(c -> c.getNextDeadlineDate() != null && c.getNextDeadlineDate().toLocalDate().isEqual(today))
             .count();
@@ -450,6 +454,7 @@ public class DebtCaseService {
 
         return new CasesSummaryDto(
             totalActiveCases,
+            overdue,
             dueToday,
             dueNext7Days,
             stateCounts

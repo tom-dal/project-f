@@ -52,7 +52,6 @@ public class DebtCase {
 
     private Boolean paid = false;
 
-
     private String notes;
 
     // Audit fields
@@ -72,11 +71,8 @@ public class DebtCase {
     @Field("last_modified_by")
     private String lastModifiedBy;
 
-    // USER PREFERENCE: MongoDB approach - embed related collections as arrays
-    // This replaces JPA @OneToMany relationships
     private List<Installment> installments = new ArrayList<>();
 
-    // CUSTOM IMPLEMENTATION: Embedded payments instead of separate collection
     private List<Payment> payments = new ArrayList<>();
 
 }

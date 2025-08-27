@@ -42,6 +42,13 @@ public class DebtCaseSummaryIntegrationTest {
         debtCaseRepository.deleteAll();
         LocalDate today = LocalDate.now();
 
+        DebtCase overdue = new DebtCase();
+        overdue.setDebtorName("Deadline -1");
+        overdue.setCurrentState(CaseState.MESSA_IN_MORA_INVIATA);
+        overdue.setCurrentStateDate(LocalDateTime.now());
+        overdue.setNextDeadlineDate(today.minusDays(1).atStartOfDay());
+        debtCaseRepository.save(overdue);
+
         DebtCase c1 = new DebtCase();
         c1.setDebtorName("Deadline Oggi");
         c1.setCurrentState(CaseState.MESSA_IN_MORA_DA_FARE);
@@ -78,9 +85,11 @@ public class DebtCaseSummaryIntegrationTest {
             .andDo(print())
             .andExpect(status().isOk())
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-            .andExpect(jsonPath("$.totalActiveCases", is(3))) // esclude COMPLETATA
+            .andExpect(jsonPath("$.totalActiveCases", is(4))) // esclude COMPLETATA
+            .andExpect(jsonPath("$.overdue", is(1)))
             .andExpect(jsonPath("$.dueToday", is(1)))
-            .andExpect(jsonPath("$.dueNext7Days", is(2))) // include oggi +3
+            .andExpect(jsonPath("$.dueNext7Days", is(2))) // include oggi +3, esclude -1 e +10
+            .andExpect(jsonPath("$.states.MESSA_IN_MORA_INVIATA", is(1)))
             .andExpect(jsonPath("$.states.MESSA_IN_MORA_DA_FARE", is(1)))
             .andExpect(jsonPath("$.states.DEPOSITO_RICORSO", is(1)))
             .andExpect(jsonPath("$.states.PRECETTO", is(1)))

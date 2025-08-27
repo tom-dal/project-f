@@ -1,11 +1,13 @@
 class CasesSummary {
   final int totalActiveCases;
+  final int overdue; // pratiche scadute (nextDeadlineDate < oggi)
   final int dueToday;
   final int dueNext7Days;
   final Map<String, int> states; // raw enum names from backend
 
   CasesSummary({
     required this.totalActiveCases,
+    required this.overdue,
     required this.dueToday,
     required this.dueNext7Days,
     required this.states,
@@ -19,6 +21,7 @@ class CasesSummary {
     });
     return CasesSummary(
       totalActiveCases: (json['totalActiveCases'] as num?)?.toInt() ?? 0,
+      overdue: (json['overdue'] as num?)?.toInt() ?? 0,
       dueToday: (json['dueToday'] as num?)?.toInt() ?? 0,
       dueNext7Days: (json['dueNext7Days'] as num?)?.toInt() ?? 0,
       states: mapped,
@@ -38,4 +41,3 @@ class CasesSummary {
 
   String readableStateLabel(String raw) => readableStateNames[raw] ?? raw;
 }
-
