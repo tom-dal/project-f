@@ -219,4 +219,41 @@ class DebtCaseControllerFiltersIntegrationTest {
                 .andExpect(jsonPath("$._embedded.cases[0].debtorName", is("Filter Beta")))
                 .andExpect(jsonPath("$.page.totalElements", is(1)));
     }
+
+    @Test
+    @WithMockUser(username = "user", roles = "USER")
+    void shouldFilterCasesWithDeadlineToday() throws Exception {
+        // Setup: create cases with deadlines yesterday, today, tomorrow, and null
+        debtCaseRepository.deleteAll();
+        createStateTransitionConfigs();
+
+        LocalDateTime today = LocalDateTime.now().withHour(12).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime yesterday = today.minusDays(1);
+        LocalDateTime tomorrow = today.plusDays(1);
+
+        String idYesterday = debtCaseService.createDebtCase("Scadenza Ieri", CaseState.MESSA_IN_MORA_DA_FARE, null, new BigDecimal("100.00")).getId();
+        String idToday = debtCaseService.createDebtCase("Scadenza Oggi", CaseState.MESSA_IN_MORA_DA_FARE, null, new BigDecimal("200.00")).getId();
+        String idTomorrow = debtCaseService.createDebtCase("Scadenza Domani", CaseState.MESSA_IN_MORA_DA_FARE, null, new BigDecimal("300.00")).getId();
+        String idNoDeadline = debtCaseService.createDebtCase("Senza Scadenza", CaseState.MESSA_IN_MORA_DA_FARE, null, new BigDecimal("400.00")).getId();
+
+        // Set deadlines
+        debtCaseService.updateDebtCase(idYesterday, null, null, null, yesterday, null, null, null, null, null);
+        debtCaseService.updateDebtCase(idToday, null, null, null, today, null, null, null, null, null);
+        debtCaseService.updateDebtCase(idTomorrow, null, null, null, tomorrow, null, null, null, null, null);
+        // idNoDeadline: no deadline set
+
+        // Prepare filter for today (from 00:00:00 to 23:59:59)
+        LocalDateTime from = today.withHour(0).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime to = today.withHour(23).withMinute(59).withSecond(59).withNano(999_999_999);
+
+        mockMvc.perform(get("/cases")
+                .param("nextDeadlineFrom", from.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
+                .param("nextDeadlineTo", to.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
+                .contentType(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$._embedded.cases", hasSize(1)))
+                .andExpect(jsonPath("$._embedded.cases[0].debtorName", is("Scadenza Oggi")))
+                .andExpect(jsonPath("$._embedded.cases[0].nextDeadlineDate", startsWith(today.toLocalDate().toString())));
+    }
 }

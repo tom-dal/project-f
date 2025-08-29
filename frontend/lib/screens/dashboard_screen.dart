@@ -172,6 +172,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 onRetry: () => context.read<CasesSummaryBloc>().add(LoadCasesSummary()),
                 showKpis: true,
                 showStateCards: true,
+                activeStates: _statesFilter,
+                deadlineFrom: _deadlineFrom,
+                deadlineTo: _deadlineTo,
+                onSetStates: (states) {
+                  _onStatesFilter(states);
+                },
+                onSetDeadlineRange: (from, to) {
+                  _onDeadlineRange(from, to);
+                },
+                onClearAllFilters: () {
+                  _onStatesFilter([]);
+                  _onDeadlineRange(null, null);
+                },
               ),
             ),
             Expanded(
@@ -195,6 +208,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 onStatesFilter: _onStatesFilter,
                                 onSearchFilter: _onSearchFilter,
                                 onDeadlineRange: _onDeadlineRange,
+                                selectedStates: _statesFilter, // sync with quick filters
+                                externalDeadlineFrom: _deadlineFrom,
+                                externalDeadlineTo: _deadlineTo,
                               ),
                               const SizedBox(height: 16),
                               // Cases table
@@ -211,15 +227,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       Row(
                                         children: [
                                           Text(
-                                            'Pratiche (${state.totalElements})',
-                                            style: const TextStyle(
-                                              fontSize: 20,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          const Spacer(),
-                                          Text(
-                                            'Pagina ${state.currentPage + 1} di ${state.totalPages} - ${state.totalElements} totali',
+                                            'Pagina ${state.currentPage + 1} di ${state.totalPages} - ${state.totalElements} pratiche.',
                                             style: TextStyle(
                                               fontSize: 14,
                                               color: Colors.grey[600],

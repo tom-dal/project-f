@@ -7,12 +7,18 @@ class CaseFilters extends StatefulWidget {
   final Function(List<CaseState>) onStatesFilter;
   final Function(String) onSearchFilter;
   final Function(DateTime?, DateTime?) onDeadlineRange;
+  final List<CaseState>? selectedStates; // external controlled states
+  final DateTime? externalDeadlineFrom;
+  final DateTime? externalDeadlineTo;
 
   const CaseFilters({
     super.key,
     required this.onStatesFilter,
     required this.onSearchFilter,
     required this.onDeadlineRange,
+    this.selectedStates,
+    this.externalDeadlineFrom,
+    this.externalDeadlineTo,
   });
 
   @override
@@ -371,6 +377,32 @@ class _CaseFiltersState extends State<CaseFilters> {
     widget.onStatesFilter(const []);
     widget.onSearchFilter('');
     widget.onDeadlineRange(null, null);
+  }
+
+  @override
+  void didUpdateWidget(covariant CaseFilters oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    bool changed = false;
+    if (widget.selectedStates != null) {
+      final newSet = widget.selectedStates!;
+      if (newSet.length != _selectedStates.length || !_selectedStates.every(newSet.contains)) {
+        _selectedStates = List.from(newSet);
+        changed = true;
+      }
+    }
+    if (widget.externalDeadlineFrom != null || _deadlineFrom != null) {
+      if (widget.externalDeadlineFrom?.millisecondsSinceEpoch != _deadlineFrom?.millisecondsSinceEpoch) {
+        _deadlineFrom = widget.externalDeadlineFrom;
+        changed = true;
+      }
+    }
+    if (widget.externalDeadlineTo != null || _deadlineTo != null) {
+      if (widget.externalDeadlineTo?.millisecondsSinceEpoch != _deadlineTo?.millisecondsSinceEpoch) {
+        _deadlineTo = widget.externalDeadlineTo;
+        changed = true;
+      }
+    }
+    if (changed) setState(() {});
   }
 
   String _getStateDisplayName(CaseState state) {

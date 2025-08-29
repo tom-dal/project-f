@@ -632,6 +632,12 @@ class ApiService {
       final queryString = parts.join('&');
       final url = '/cases${queryString.isNotEmpty ? '?$queryString' : ''}';
 
+      // Log all filters sent to backend
+      // USER PREFERENCE: Log filters sent to backend on console
+      print('[API] Filtri inviati al backend: '
+          + baseParams.toString()
+          + (states != null ? ', states: ' + states.map(_caseStateToJson).toList().toString() : ''));
+
       final response = await _dio.get(
         url,
         options: Options(
