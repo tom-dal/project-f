@@ -10,12 +10,17 @@ class DebtCase {
   final String debtorName;
   final double owedAmount;
   final CaseState state;
+  @JsonKey(fromJson: _dateFromJson, toJson: _dateToJson)
   final DateTime? createdDate;
+  @JsonKey(fromJson: _dateFromJson, toJson: _dateToJson)
   final DateTime? updatedDate;
+  @JsonKey(fromJson: _dateFromJson, toJson: _dateToJson)
   final DateTime lastStateDate;
+  @JsonKey(fromJson: _dateFromJson, toJson: _dateToJson)
   final DateTime? nextDeadlineDate;
   final String? createdBy;
   final String? lastModifiedBy;
+  @JsonKey(fromJson: _dateFromJson, toJson: _dateToJson)
   final DateTime? lastModifiedDate;
   final bool? ongoingNegotiations;
   final bool? hasInstallmentPlan;
@@ -52,22 +57,23 @@ class DebtCase {
     this.links,
   });
 
-
   static DateTime? _dateFromJson(dynamic value) {
     if (value == null) return null;
     if (value is String) {
       // Handle date-only format (e.g., "2025-02-19")
       if (value.length == 10 && !value.contains('T')) {
-        return DateTime.parse('${value}T00:00:00');
+        return DateTime.parse(value);
       }
-      // Handle full datetime format (e.g., "2025-01-20T11:15:00")
+      // Handle full ISO format (e.g., "2025-02-19T00:00:00")
       return DateTime.parse(value);
     }
-    throw ArgumentError('Invalid date type: ${value.runtimeType}');
+    return null;
   }
 
-  static String? _dateToJson(DateTime? date) {
-    return date?.toIso8601String();
+  static String? _dateToJson(DateTime? value) {
+    if (value == null) return null;
+    // Send only date part (yyyy-MM-dd)
+    return value.toIso8601String().split('T').first;
   }
 
   factory DebtCase.fromJson(Map<String, dynamic> json) => _$DebtCaseFromJson(json);

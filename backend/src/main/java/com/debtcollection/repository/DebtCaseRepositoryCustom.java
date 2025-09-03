@@ -6,7 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -30,14 +30,14 @@ public interface DebtCaseRepositoryCustom {
         Boolean ongoingNegotiations,
         String notes,
         // Date ranges (inclusive)
-        LocalDateTime nextDeadlineFrom,
-        LocalDateTime nextDeadlineTo,
-        LocalDateTime currentStateFrom,
-        LocalDateTime currentStateTo,
-        LocalDateTime createdFrom,
-        LocalDateTime createdTo,
-        LocalDateTime lastModifiedFrom,
-        LocalDateTime lastModifiedTo,
+        LocalDate nextDeadlineFrom,
+        LocalDate nextDeadlineTo,
+        LocalDate currentStateFrom,
+        LocalDate currentStateTo,
+        LocalDate createdFrom,
+        LocalDate createdTo,
+        LocalDate lastModifiedFrom,
+        LocalDate lastModifiedTo,
         Pageable pageable
     );
 }

@@ -3,6 +3,8 @@ package com.debtcollection.security;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import io.jsonwebtoken.security.SignatureException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -12,7 +14,6 @@ import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
-import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.util.Arrays;
 import java.util.Base64;
@@ -23,6 +24,8 @@ import java.util.stream.Collectors;
 
 @Component
 public class JwtTokenProvider {
+
+    private static final Logger log = LoggerFactory.getLogger(JwtTokenProvider.class);
 
     private static final String ROLES_KEY = "roles";
     private static final String PASSWORD_CHANGE_KEY = "password_change";
@@ -87,22 +90,22 @@ public class JwtTokenProvider {
                 .parseClaimsJws(authToken);
             return true;
         } catch (ExpiredJwtException e) {
-            System.err.println("JWT token is expired: " + e.getMessage());
+            log.debug("JWT expired: {}", e.getMessage());
             return false;
         } catch (UnsupportedJwtException e) {
-            System.err.println("JWT token is unsupported: " + e.getMessage());
+            log.warn("JWT unsupported: {}", e.getMessage());
             return false;
         } catch (MalformedJwtException e) {
-            System.err.println("Invalid JWT token: " + e.getMessage());
+            log.warn("JWT malformed: {}", e.getMessage());
             return false;
         } catch (SignatureException e) {
-            System.err.println("Invalid JWT signature: " + e.getMessage());
+            log.warn("JWT signature invalid: {}", e.getMessage());
             return false;
         } catch (IllegalArgumentException e) {
-            System.err.println("JWT claims string is empty: " + e.getMessage());
+            log.warn("JWT illegal argument: {}", e.getMessage());
             return false;
         } catch (JwtException e) {
-            System.err.println("JWT validation error: " + e.getMessage());
+            log.error("JWT generic validation error: {}", e.getMessage());
             return false;
         }
     }
@@ -139,4 +142,4 @@ public class JwtTokenProvider {
 
         return claims.getSubject();
     }
-} 
+}

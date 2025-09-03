@@ -207,8 +207,8 @@ class DebtCaseControllerFiltersIntegrationTest {
     @Test
     @WithMockUser(username = "user", roles = "USER")
     void filterNextDeadlineRange() throws Exception {
-        String from = betaNextDeadline.minusDays(1).withNano(0).format(fmt());
-        String to   = betaNextDeadline.plusDays(1).withNano(0).format(fmt());
+        String from = betaNextDeadline.minusDays(1).toLocalDate().toString();
+        String to   = betaNextDeadline.plusDays(1).toLocalDate().toString();
         mockMvc.perform(get("/cases")
                 .param("nextDeadlineFrom", from)
                 .param("nextDeadlineTo", to)
@@ -247,8 +247,8 @@ class DebtCaseControllerFiltersIntegrationTest {
         LocalDateTime to = today.withHour(23).withMinute(59).withSecond(59).withNano(999_999_999);
 
         mockMvc.perform(get("/cases")
-                .param("nextDeadlineFrom", from.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
-                .param("nextDeadlineTo", to.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
+                .param("nextDeadlineFrom", from.toLocalDate().toString())
+                .param("nextDeadlineTo", to.toLocalDate().toString())
                 .contentType(MediaType.APPLICATION_JSON))
                 .andDo(print())
                 .andExpect(status().isOk())

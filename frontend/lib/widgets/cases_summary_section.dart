@@ -15,6 +15,7 @@ class CasesSummarySection extends StatelessWidget {
   final void Function(List<CaseState>) onSetStates;
   final void Function(DateTime? from, DateTime? to) onSetDeadlineRange;
   final VoidCallback onClearAllFilters;
+  final void Function(List<CaseState> states, DateTime? from, DateTime? to)? onApplyQuickFilter; // USER PREFERENCE: combined quick filter
   const CasesSummarySection({
     super.key,
     required this.onRetry,
@@ -26,6 +27,7 @@ class CasesSummarySection extends StatelessWidget {
     required this.onSetStates,
     required this.onSetDeadlineRange,
     required this.onClearAllFilters,
+    this.onApplyQuickFilter,
   });
 
   @override
@@ -66,6 +68,7 @@ class CasesSummarySection extends StatelessWidget {
                 onSetStates: onSetStates,
                 onSetDeadlineRange: onSetDeadlineRange,
                 onClearAllFilters: onClearAllFilters,
+                onApplyQuickFilter: onApplyQuickFilter,
               ) : const SizedBox.shrink();
               final statesWidget = showStateCards ? _StatesGrid(
                 summary: s,
@@ -149,6 +152,7 @@ class _KpiChips extends StatelessWidget {
   final void Function(List<CaseState>) onSetStates;
   final void Function(DateTime? from, DateTime? to) onSetDeadlineRange;
   final VoidCallback onClearAllFilters;
+  final void Function(List<CaseState> states, DateTime? from, DateTime? to)? onApplyQuickFilter; // USER PREFERENCE: combined
   const _KpiChips({
     required this.summary,
     this.twoColumns = false,
@@ -158,6 +162,7 @@ class _KpiChips extends StatelessWidget {
     required this.onSetStates,
     required this.onSetDeadlineRange,
     required this.onClearAllFilters,
+    this.onApplyQuickFilter,
   });
 
   DateTime _startOfDay(DateTime d) => DateTime(d.year, d.month, d.day);
@@ -194,10 +199,14 @@ class _KpiChips extends StatelessWidget {
   void _applyAttive() {
     final nonCompleted = CaseState.values.where((c) => c != CaseState.completata).toList();
     if (_isActiveAttive()) {
-      onClearAllFilters(); // toggle off to clear
+      onClearAllFilters(); // toggle off
     } else {
-      onSetStates(nonCompleted);
-      onSetDeadlineRange(null, null);
+      if (onApplyQuickFilter != null) {
+        onApplyQuickFilter!(nonCompleted, null, null);
+      } else {
+        onSetStates(nonCompleted);
+        onSetDeadlineRange(null, null);
+      }
     }
   }
   void _applyOverdue() {
@@ -205,8 +214,12 @@ class _KpiChips extends StatelessWidget {
       onClearAllFilters();
     } else {
       final yesterday = DateTime.now().subtract(const Duration(days:1));
-      onSetStates([]); // overwrite states
-      onSetDeadlineRange(null, _endOfDay(yesterday));
+      if (onApplyQuickFilter != null) {
+        onApplyQuickFilter!(const [], null, DateTime(yesterday.year, yesterday.month, yesterday.day, 23,59,59,999));
+      } else {
+        onSetStates([]);
+        onSetDeadlineRange(null, DateTime(yesterday.year, yesterday.month, yesterday.day, 23,59,59,999));
+      }
     }
   }
   void _applyToday() {
@@ -214,21 +227,30 @@ class _KpiChips extends StatelessWidget {
       onClearAllFilters();
     } else {
       final today = DateTime.now();
-      final from = _startOfDay(today);
-      final to = _endOfDay(today);
-      print('[DEBUG QUICK FILTER] TODAY apply range from=' + from.toIso8601String() + ' to=' + to.toIso8601String());
-      onSetStates([]);
-      onSetDeadlineRange(from, to);
+      final from = DateTime(today.year, today.month, today.day);
+      final to = DateTime(today.year, today.month, today.day, 23,59,59,999);
+      if (onApplyQuickFilter != null) {
+        onApplyQuickFilter!(const [], from, to);
+      } else {
+        onSetStates([]);
+        onSetDeadlineRange(from, to);
+      }
     }
   }
   void _applyNext7() {
     if (_isActiveNext7()) {
       onClearAllFilters();
     } else {
-      final today = _startOfDay(DateTime.now());
-      final plus7 = today.add(const Duration(days:7));
-      onSetStates([]);
-      onSetDeadlineRange(today, _endOfDay(plus7));
+      final today = DateTime.now();
+      final start = DateTime(today.year, today.month, today.day);
+      final plus7 = start.add(const Duration(days:7));
+      final end = DateTime(plus7.year, plus7.month, plus7.day, 23,59,59,999);
+      if (onApplyQuickFilter != null) {
+        onApplyQuickFilter!(const [], start, end);
+      } else {
+        onSetStates([]);
+        onSetDeadlineRange(start, end);
+      }
     }
   }
 

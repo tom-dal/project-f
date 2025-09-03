@@ -5,7 +5,7 @@ import lombok.Data;
 import org.springframework.format.annotation.DateTimeFormat;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -31,23 +31,23 @@ public class DebtCaseFilterRequest {
     private Boolean ongoingNegotiations;
 
     // USER PREFERENCE: Range date dedicati (inclusivi) per i diversi campi data
-    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-    private LocalDateTime nextDeadlineFrom;
-    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-    private LocalDateTime nextDeadlineTo;
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+    private LocalDate nextDeadlineFrom;
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+    private LocalDate nextDeadlineTo;
 
-    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-    private LocalDateTime currentStateFrom;
-    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-    private LocalDateTime currentStateTo;
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+    private LocalDate currentStateFrom;
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+    private LocalDate currentStateTo;
 
-    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-    private LocalDateTime createdFrom;
-    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-    private LocalDateTime createdTo;
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+    private LocalDate createdFrom;
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+    private LocalDate createdTo;
 
-    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-    private LocalDateTime lastModifiedFrom;
-    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-    private LocalDateTime lastModifiedTo;
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+    private LocalDate lastModifiedFrom;
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+    private LocalDate lastModifiedTo;
 }

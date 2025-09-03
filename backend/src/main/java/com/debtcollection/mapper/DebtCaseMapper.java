@@ -4,10 +4,10 @@ import com.debtcollection.dto.DebtCaseDto;
 import com.debtcollection.model.DebtCase;
 import com.debtcollection.model.Payment;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -18,41 +18,34 @@ public class DebtCaseMapper {
 
     public DebtCaseDto toDto(DebtCase debtCase) {
         DebtCaseDto dto = new DebtCaseDto();
-        BeanUtils.copyProperties(debtCase, dto);
-        
-        // USER PREFERENCE: Conversione esplicita Double -> BigDecimal per owedAmount
-        dto.setOwedAmount(BigDecimal.valueOf(debtCase.getOwedAmount()));
-
-        // Usa i nuovi campi diretti
+        // USER PREFERENCE: Manual mapping for monetary and date fields, avoid BeanUtils
+        dto.setId(debtCase.getId());
+        dto.setDebtorName(debtCase.getDebtorName());
+        dto.setOwedAmount(debtCase.getOwedAmount() != null ? BigDecimal.valueOf(debtCase.getOwedAmount()) : null);
         dto.setState(debtCase.getCurrentState());
+        dto.setCreatedDate(debtCase.getCreatedDate());
+        dto.setUpdatedDate(debtCase.getLastModifiedDate());
         dto.setLastStateDate(debtCase.getCurrentStateDate());
-        dto.setNextDeadlineDate(debtCase.getNextDeadlineDate() != null ? 
-            debtCase.getNextDeadlineDate().toLocalDate() : null);
-        
-        // CUSTOM IMPLEMENTATION: Explicit auditing fields mapping
+        dto.setNextDeadlineDate(debtCase.getNextDeadlineDate() != null ? debtCase.getNextDeadlineDate().toLocalDate() : null);
         dto.setCreatedBy(debtCase.getCreatedBy());
         dto.setLastModifiedBy(debtCase.getLastModifiedBy());
         dto.setLastModifiedDate(debtCase.getLastModifiedDate());
-        // updatedDate è un alias per lastModifiedDate
-        dto.setUpdatedDate(debtCase.getLastModifiedDate());
-        
-        // CUSTOM IMPLEMENTATION: Business logic fields
+        dto.setOngoingNegotiations(debtCase.getOngoingNegotiations());
         dto.setHasInstallmentPlan(debtCase.getHasInstallmentPlan());
         dto.setPaid(debtCase.getPaid());
-        
         // Calculate amounts for frontend convenience
-        Double totalPaid = debtCase.getPayments().stream()
+        Double totalPaid = debtCase.getPayments() != null ? debtCase.getPayments().stream()
+                .filter(Objects::nonNull)
                 .map(Payment::getAmount)
-                .reduce(0.0, Double::sum);
+                .filter(Objects::nonNull)
+                .reduce(0.0, Double::sum) : 0.0;
         dto.setTotalPaidAmount(BigDecimal.valueOf(totalPaid));
-        dto.setRemainingAmount(BigDecimal.valueOf(debtCase.getOwedAmount()).subtract(BigDecimal.valueOf(totalPaid)));
-
+        dto.setRemainingAmount(
+                dto.getOwedAmount() != null ? dto.getOwedAmount().subtract(BigDecimal.valueOf(totalPaid)) : null
+        );
         // Map collections
-        dto.setPayments(debtCase.getPayments().stream().map(paymentMapper::toDto).toList());
-        dto.setInstallments(debtCase.getInstallments().stream().map(installmentMapper::toDto).toList());
-        dto.setOngoingNegotiations(debtCase.getOngoingNegotiations());
-
+        dto.setPayments(debtCase.getPayments() != null ? debtCase.getPayments().stream().filter(Objects::nonNull).map(paymentMapper::toDto).toList() : null);
+        dto.setInstallments(debtCase.getInstallments() != null ? debtCase.getInstallments().stream().filter(Objects::nonNull).map(installmentMapper::toDto).toList() : null);
         return dto;
     }
-
 }

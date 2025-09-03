@@ -829,8 +829,8 @@ public class DebtCaseControllerIntegrationTest {
         LocalDateTime from = newer.minusSeconds(1);
         LocalDateTime to = newer.plusSeconds(1);
         mockMvc.perform(get("/cases")
-                .param("currentStateFrom", from.toString())
-                .param("currentStateTo", to.toString())
+                .param("currentStateFrom", from.toLocalDate().toString())
+                .param("currentStateTo", to.toLocalDate().toString())
                 .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$._embedded.cases", hasSize(1)))
@@ -847,8 +847,8 @@ public class DebtCaseControllerIntegrationTest {
         debtCaseRepository.save(luigi);
 
         mockMvc.perform(get("/cases")
-                .param("currentStateFrom", boundary.toString())
-                .param("currentStateTo", now.plusDays(1).toString())
+                .param("currentStateFrom", boundary.toLocalDate().toString())
+                .param("currentStateTo", now.plusDays(1).toLocalDate().toString())
                 .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$._embedded.cases[*].debtorName", hasItem("Luigi Verdi")));
@@ -866,8 +866,8 @@ public class DebtCaseControllerIntegrationTest {
         mockMvc.perform(get("/cases")
                 .param("notes", "integrazione")
                 .param("state", anna.getCurrentState().name())
-                .param("currentStateFrom", tagDate.minusHours(1).toString())
-                .param("currentStateTo", tagDate.plusHours(1).toString())
+                .param("currentStateFrom", tagDate.minusHours(1).toLocalDate().toString())
+                .param("currentStateTo", tagDate.plusHours(1).toLocalDate().toString())
                 .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$._embedded.cases", hasSize(1)))

@@ -38,6 +38,45 @@ class _CaseFiltersState extends State<CaseFilters> {
   List<CaseState> _draftStates = []; // temp selection before apply
 
   @override
+  void initState() {
+    super.initState();
+    // USER PREFERENCE: initialize internal state from external props to keep quick filters in sync
+    _selectedStates = widget.selectedStates != null ? List.from(widget.selectedStates!) : [];
+    _deadlineFrom = widget.externalDeadlineFrom;
+    _deadlineTo = widget.externalDeadlineTo;
+  }
+
+  @override
+  void didUpdateWidget(covariant CaseFilters oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // USER PREFERENCE: sync deadlines if parent (quick filters) changed them
+    final fromChanged = widget.externalDeadlineFrom != oldWidget.externalDeadlineFrom;
+    final toChanged = widget.externalDeadlineTo != oldWidget.externalDeadlineTo;
+    if (fromChanged || toChanged) {
+      if (_deadlineFrom != widget.externalDeadlineFrom || _deadlineTo != widget.externalDeadlineTo) {
+        setState(() {
+          _deadlineFrom = widget.externalDeadlineFrom;
+            // keep end-of-day if provided externally, otherwise just assign
+          _deadlineTo = widget.externalDeadlineTo;
+        });
+      }
+    }
+    // Also sync selected states (prevents future desync similar to deadlines)
+    if (widget.selectedStates != oldWidget.selectedStates) {
+      final newStates = widget.selectedStates != null ? List<CaseState>.from(widget.selectedStates!) : <CaseState>[];
+      bool differs = newStates.length != _selectedStates.length;
+      if (!differs) {
+        for (int i = 0; i < newStates.length; i++) {
+          if (newStates[i] != _selectedStates[i]) { differs = true; break; }
+        }
+      }
+      if (differs) {
+        setState(() { _selectedStates = newStates; });
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _removeStatesOverlay();
     _statesScrollController.dispose();
@@ -377,32 +416,6 @@ class _CaseFiltersState extends State<CaseFilters> {
     widget.onStatesFilter(const []);
     widget.onSearchFilter('');
     widget.onDeadlineRange(null, null);
-  }
-
-  @override
-  void didUpdateWidget(covariant CaseFilters oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    bool changed = false;
-    if (widget.selectedStates != null) {
-      final newSet = widget.selectedStates!;
-      if (newSet.length != _selectedStates.length || !_selectedStates.every(newSet.contains)) {
-        _selectedStates = List.from(newSet);
-        changed = true;
-      }
-    }
-    if (widget.externalDeadlineFrom != null || _deadlineFrom != null) {
-      if (widget.externalDeadlineFrom?.millisecondsSinceEpoch != _deadlineFrom?.millisecondsSinceEpoch) {
-        _deadlineFrom = widget.externalDeadlineFrom;
-        changed = true;
-      }
-    }
-    if (widget.externalDeadlineTo != null || _deadlineTo != null) {
-      if (widget.externalDeadlineTo?.millisecondsSinceEpoch != _deadlineTo?.millisecondsSinceEpoch) {
-        _deadlineTo = widget.externalDeadlineTo;
-        changed = true;
-      }
-    }
-    if (changed) setState(() {});
   }
 
   String _getStateDisplayName(CaseState state) {

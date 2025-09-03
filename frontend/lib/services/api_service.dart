@@ -618,8 +618,8 @@ class ApiService {
       if (hasInstallmentPlan != null) baseParams['hasInstallmentPlan'] = '$hasInstallmentPlan';
       if (paid != null) baseParams['paid'] = '$paid';
       if (ongoingNegotiations != null) baseParams['ongoingNegotiations'] = '$ongoingNegotiations';
-      if (nextDeadlineFrom != null) baseParams['nextDeadlineFrom'] = nextDeadlineFrom.toIso8601String();
-      if (nextDeadlineTo != null) baseParams['nextDeadlineTo'] = nextDeadlineTo.toIso8601String();
+      if (nextDeadlineFrom != null) baseParams['nextDeadlineFrom'] = nextDeadlineFrom.toIso8601String().split('T').first;
+      if (nextDeadlineTo != null) baseParams['nextDeadlineTo'] = nextDeadlineTo.toIso8601String().split('T').first;
 
       // Build query string manually to control list format (states=VAL&states=VAL2)
       final parts = <String>[];

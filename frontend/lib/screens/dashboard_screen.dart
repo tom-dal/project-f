@@ -119,6 +119,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  void _applyQuickFilter({required List<CaseState> states, DateTime? from, DateTime? to}) {
+    _statesFilter = states;
+    _deadlineFrom = from;
+    _deadlineTo = to;
+    _currentPage = 0;
+    _loadCases(fullLoading: false);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -180,6 +188,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 },
                 onSetDeadlineRange: (from, to) {
                   _onDeadlineRange(from, to);
+                },
+                onApplyQuickFilter: (states, from, to) {
+                  _applyQuickFilter(states: states, from: from, to: to);
                 },
                 onClearAllFilters: () {
                   _onStatesFilter([]);

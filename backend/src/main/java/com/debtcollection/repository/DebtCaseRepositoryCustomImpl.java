@@ -12,7 +12,7 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -37,14 +37,14 @@ public class DebtCaseRepositoryCustomImpl implements DebtCaseRepositoryCustom {
             Boolean paid,
             Boolean ongoingNegotiations,
             String notes,
-            LocalDateTime nextDeadlineFrom,
-            LocalDateTime nextDeadlineTo,
-            LocalDateTime currentStateFrom,
-            LocalDateTime currentStateTo,
-            LocalDateTime createdFrom,
-            LocalDateTime createdTo,
-            LocalDateTime lastModifiedFrom,
-            LocalDateTime lastModifiedTo,
+            LocalDate nextDeadlineFrom,
+            LocalDate nextDeadlineTo,
+            LocalDate currentStateFrom,
+            LocalDate currentStateTo,
+            LocalDate createdFrom,
+            LocalDate createdTo,
+            LocalDate lastModifiedFrom,
+            LocalDate lastModifiedTo,
             Pageable pageable) {
 
         Criteria criteria = new Criteria();
@@ -84,25 +84,47 @@ public class DebtCaseRepositoryCustomImpl implements DebtCaseRepositoryCustom {
             criteria.and("notes").regex(notes.trim(), "i");
         }
 
-        // Date ranges (inclusive)
-        applyDateRange(criteria, "nextDeadlineDate", nextDeadlineFrom, nextDeadlineTo);
-        applyDateRange(criteria, "currentStateDate", currentStateFrom, currentStateTo);
-        applyDateRange(criteria, "createdDate", createdFrom, createdTo);
-        applyDateRange(criteria, "lastModifiedDate", lastModifiedFrom, lastModifiedTo);
+        // USER PREFERENCE: Uniform single-criteria pattern for all date ranges to avoid duplicate key exception
+        if (nextDeadlineFrom != null || nextDeadlineTo != null) {
+            Criteria c = criteria.and("nextDeadlineDate");
+            if (nextDeadlineFrom != null) {
+                c.gte(nextDeadlineFrom.atStartOfDay());
+            }
+            if (nextDeadlineTo != null) {
+                c.lt(nextDeadlineTo.plusDays(1).atStartOfDay());
+            }
+        }
+        if (currentStateFrom != null || currentStateTo != null) {
+            Criteria c = criteria.and("currentStateDate");
+            if (currentStateFrom != null) {
+                c.gte(currentStateFrom.atStartOfDay());
+            }
+            if (currentStateTo != null) {
+                c.lt(currentStateTo.plusDays(1).atStartOfDay());
+            }
+        }
+        if (createdFrom != null || createdTo != null) {
+            Criteria c = criteria.and("createdDate");
+            if (createdFrom != null) {
+                c.gte(createdFrom.atStartOfDay());
+            }
+            if (createdTo != null) {
+                c.lt(createdTo.plusDays(1).atStartOfDay());
+            }
+        }
+        if (lastModifiedFrom != null || lastModifiedTo != null) {
+            Criteria c = criteria.and("lastModifiedDate");
+            if (lastModifiedFrom != null) {
+                c.gte(lastModifiedFrom.atStartOfDay());
+            }
+            if (lastModifiedTo != null) {
+                c.lt(lastModifiedTo.plusDays(1).atStartOfDay());
+            }
+        }
 
         Query query = new Query(criteria).with(pageable);
         List<DebtCase> debtCases = mongoTemplate.find(query, DebtCase.class);
         long total = mongoTemplate.count(new Query(criteria), DebtCase.class);
         return new PageImpl<>(debtCases, pageable, total);
-    }
-
-    private void applyDateRange(Criteria baseCriteria, String fieldName, LocalDateTime from, LocalDateTime to) {
-        if (from != null && to != null) {
-            baseCriteria.and(fieldName).gte(from).lte(to);
-        } else if (from != null) {
-            baseCriteria.and(fieldName).gte(from);
-        } else if (to != null) {
-            baseCriteria.and(fieldName).lte(to);
-        }
     }
 }
