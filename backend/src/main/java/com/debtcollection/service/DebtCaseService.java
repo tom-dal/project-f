@@ -14,6 +14,8 @@ import com.debtcollection.repository.DebtCaseRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -160,6 +162,10 @@ public class DebtCaseService {
      * CUSTOM IMPLEMENTATION: Supports advanced business logic filtering
      */
     public Page<DebtCaseDto> findWithFilters(DebtCaseFilterRequest filterRequest, Pageable pageable) {
+        // CUSTOM IMPLEMENTATION: Default sort fallback se il client non specifica sort
+        if (pageable.getSort().isUnsorted()) {
+            pageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by(Sort.Direction.ASC, "nextDeadlineDate"));
+        }
         return debtCaseRepository.findByFilters(
             filterRequest.getDebtorName(),
             filterRequest.getState(),

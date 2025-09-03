@@ -20,7 +20,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final _dateFormat = DateFormat('dd/MM/yyyy');
   // USER PREFERENCE: Removed frontend filtering - all filtering now happens on backend
   String _searchQuery = '';
-  // CaseState? _stateFilter; // legacy unused now removed
   List<CaseState> _statesFilter = []; // USER PREFERENCE: multi-state filter
   DateTime? _deadlineFrom; // USER PREFERENCE: deadline range from
   DateTime? _deadlineTo;   // USER PREFERENCE: deadline range to
@@ -28,8 +27,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _pageSize = 20; // USER PREFERENCE: Made page size configurable
   static const List<int> _pageSizeOptions = [10, 20, 50, 100]; // USER PREFERENCE: Available page size options
 
-  // USER PREFERENCE: Sorting fixed to nextDeadlineDate ASC
-  static const String _fixedSortField = 'nextDeadlineDate';
+  // USER PREFERENCE: Sorting controllabile da UI (default: scadenza asc)
+  String? _sortField = 'nextDeadlineDate';
+  String _sortDirection = 'asc';
 
   bool _isRefreshing = false; // USER PREFERENCE: partial refresh indicator
 
@@ -46,7 +46,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // USER PREFERENCE: Load cases with current filters and sorting
   void _loadCases({bool fullLoading = true}) {
-    const String sortParam = 'nextDeadlineDate,asc'; // fixed sort
+    final String? sortParam = _sortField != null ? '$_sortField,$_sortDirection' : null;
     if (!fullLoading) {
       setState(() => _isRefreshing = true);
     }
@@ -96,6 +96,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _loadCases(fullLoading: false);
   }
 
+  void _onSortChange(String? field, String? direction) {
+    _sortField = field;
+    if (field == null) {
+      // reset direction default
+      _sortDirection = 'asc';
+    } else if (direction != null) {
+      _sortDirection = direction;
+    }
+    _currentPage = 0;
+    _loadCases(fullLoading: false);
+  }
+
   // USER PREFERENCE: Handle page size change
   void _onPageSizeChanged(int? newSize) {
     if (newSize != null && newSize != _pageSize) {
@@ -125,6 +137,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _deadlineTo = to;
     _currentPage = 0;
     _loadCases(fullLoading: false);
+  }
+
+  String _currentSortLabel() {
+    // Descrizioni naturali della direzione
+    if (_sortField == null) {
+      return 'Ordinamento: Scadenza (più imminenti prima)';
+    }
+    if (_sortField == 'nextDeadlineDate') {
+      if (_sortDirection == 'asc') {
+        return 'Ordinamento: Scadenza (più imminenti prima)';
+      } else {
+        return 'Ordinamento: Scadenza (più lontane prima)';
+      }
+    } else if (_sortField == 'lastModifiedDate') {
+      if (_sortDirection == 'asc') {
+        return 'Ordinamento: Ultima attività (dalla meno recente alla più recente)';
+      } else {
+        return 'Ordinamento: Ultima attività (dalla più recente alla meno recente)';
+      }
+    }
+    return 'Ordinamento: —';
   }
 
   @override
@@ -183,15 +216,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 activeStates: _statesFilter,
                 deadlineFrom: _deadlineFrom,
                 deadlineTo: _deadlineTo,
-                onSetStates: (states) {
-                  _onStatesFilter(states);
-                },
-                onSetDeadlineRange: (from, to) {
-                  _onDeadlineRange(from, to);
-                },
-                onApplyQuickFilter: (states, from, to) {
-                  _applyQuickFilter(states: states, from: from, to: to);
-                },
+                onSetStates: (states) { _onStatesFilter(states); },
+                onSetDeadlineRange: (from, to) { _onDeadlineRange(from, to); },
+                onApplyQuickFilter: (states, from, to) { _applyQuickFilter(states: states, from: from, to: to); },
                 onClearAllFilters: () {
                   _onStatesFilter([]);
                   _onDeadlineRange(null, null);
@@ -222,6 +249,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 selectedStates: _statesFilter, // sync with quick filters
                                 externalDeadlineFrom: _deadlineFrom,
                                 externalDeadlineTo: _deadlineTo,
+                                sortField: _sortField,
+                                sortDirection: _sortDirection,
+                                onSortChange: _onSortChange,
                               ),
                               const SizedBox(height: 16),
                               // Cases table
@@ -236,13 +266,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
-                                          Text(
-                                            'Pagina ${state.currentPage + 1} di ${state.totalPages} - ${state.totalElements} pratiche.',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              color: Colors.grey[600],
+                                          Expanded(
+                                            child: Text(
+                                              'Pagina ${state.currentPage + 1} di ${state.totalPages} - ${state.totalElements} pratiche.',
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                color: Colors.grey[600],
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
                                             ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Text(
+                                            _currentSortLabel(),
+                                            style: TextStyle(fontSize: 13, color: Colors.grey[700], fontStyle: FontStyle.italic),
                                           ),
                                         ],
                                       ),
@@ -263,41 +302,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             icon: const Icon(Icons.chevron_right),
                                             label: const Text('Successiva'),
                                           ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 16),
-                                      Row(
-                                        children: [
-                                          const Text('Elementi per pagina:'),
-                                          const SizedBox(width: 8),
+                                          const SizedBox(width: 32),
                                           DropdownButton<int>(
                                             value: _pageSize,
+                                            items: _pageSizeOptions.map((s) => DropdownMenuItem<int>(value: s, child: Text('$s/pg'))).toList(),
                                             onChanged: _onPageSizeChanged,
-                                            items: _pageSizeOptions.map((size) {
-                                              return DropdownMenuItem<int>(
-                                                value: size,
-                                                child: Text(size.toString()),
-                                              );
-                                            }).toList(),
-                                            underline: Container(
-                                              height: 1,
-                                              color: Colors.grey.shade400,
-                                            ),
-                                            isExpanded: false,
-                                            iconSize: 24,
-                                            dropdownColor: Colors.white,
-                                            style: const TextStyle(
-                                              fontSize: 16,
-                                              color: Colors.black87,
-                                            ),
-                                          ),
-                                          const Spacer(),
-                                          Text(
-                                            'Totale: ${state.totalElements}',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              color: Colors.grey[600],
-                                            ),
                                           ),
                                         ],
                                       ),

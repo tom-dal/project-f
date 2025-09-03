@@ -10,6 +10,9 @@ class CaseFilters extends StatefulWidget {
   final List<CaseState>? selectedStates; // external controlled states
   final DateTime? externalDeadlineFrom;
   final DateTime? externalDeadlineTo;
+  final String? sortField; // USER PREFERENCE: current sort field (nextDeadlineDate | lastModifiedDate)
+  final String sortDirection; // USER PREFERENCE: asc | desc
+  final void Function(String? field, String? direction) onSortChange; // USER PREFERENCE: callback ordinamento
 
   const CaseFilters({
     super.key,
@@ -19,6 +22,9 @@ class CaseFilters extends StatefulWidget {
     this.selectedStates,
     this.externalDeadlineFrom,
     this.externalDeadlineTo,
+    required this.sortField,
+    required this.sortDirection,
+    required this.onSortChange,
   });
 
   @override
@@ -135,6 +141,9 @@ class _CaseFiltersState extends State<CaseFilters> {
                 const SizedBox(width: 12),
                 _statesPill(borderRadius),
                 const SizedBox(width: 12),
+                // Ordinamento inline
+                _buildSortChips(),
+                const SizedBox(width: 12),
                 _pillContainer(
                   width: 120,
                   child: TextButton.icon(
@@ -162,6 +171,70 @@ class _CaseFiltersState extends State<CaseFilters> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSortChips() {
+    // Determina stato chip
+    String? field = widget.sortField;
+    String dir = widget.sortDirection;
+
+    Widget _chip({required String label, required String candidateField, required IconData iconBase}) {
+      bool active = field == candidateField;
+      String? arrow; // ↑ o ↓
+      if (active) {
+        arrow = dir == 'asc' ? '↑' : '↓';
+      }
+      Color baseColor = const Color(0xFF2C3E8C);
+      Color bg = active ? baseColor.withOpacity(0.18) : baseColor.withOpacity(0.07);
+      BorderSide? side = active ? BorderSide(color: baseColor, width: 1) : null;
+
+      void cycle() {
+        // Opzione A: ciclo uniforme none -> asc -> desc -> none
+        if (!active) {
+          widget.onSortChange(candidateField, 'asc');
+        } else if (dir == 'asc') {
+          widget.onSortChange(candidateField, 'desc');
+        } else if (dir == 'desc') {
+          widget.onSortChange(null, null); // disattiva
+        }
+      }
+
+      return InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: cycle,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          constraints: const BoxConstraints(minHeight: 52), // allinea all'altezza delle altre pill
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14), // stesso padding verticale delle pill
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(24),
+            border: side != null ? Border.fromBorderSide(side) : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(iconBase, size: 18, color: baseColor),
+              const SizedBox(width: 6),
+              Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: baseColor)),
+              if (arrow != null) ...[
+                const SizedBox(width: 6),
+                Text(arrow, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: baseColor)),
+              ]
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Wrap(
+      spacing: 10,
+      runSpacing: 8,
+      children: [
+        _chip(label: 'Scadenza', candidateField: 'nextDeadlineDate', iconBase: Icons.event),
+        _chip(label: 'Ultima attività', candidateField: 'lastModifiedDate', iconBase: Icons.history),
+      ],
     );
   }
 
