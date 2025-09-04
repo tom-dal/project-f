@@ -179,7 +179,7 @@ class _CaseFiltersState extends State<CaseFilters> {
 
   Widget _buildCompact(BuildContext context) {
     final borderRadius = BorderRadius.circular(18);
-    final baseHeight = 60.0; // reduced fixed height
+    final baseHeight = 60.0; // fixed height
     final fieldHeight = 44.0;
     final searchField = TextField(
       controller: _searchController,
@@ -199,7 +199,7 @@ class _CaseFiltersState extends State<CaseFilters> {
 
     Widget wrap(Widget child) => SizedBox(height: fieldHeight, child: child);
 
-    InputDecorator datePill(String label, DateTime? value, VoidCallback onTap) => InputDecorator(
+    InputDecorator datePill(String label, DateTime? value) => InputDecorator(
       decoration: _pillDecoration(label, borderRadius).copyWith(contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
       child: Row(children: [
         const Icon(Icons.date_range, size: 16), const SizedBox(width: 4),
@@ -207,28 +207,11 @@ class _CaseFiltersState extends State<CaseFilters> {
       ]),
     );
 
-    final fromDate = InkWell(onTap: _pickFromDate, borderRadius: borderRadius, child: datePill('Da', _deadlineFrom, _pickFromDate));
-    final toDate = InkWell(onTap: _pickToDate, borderRadius: borderRadius, child: datePill('A', _deadlineTo, _pickToDate));
+    final fromDate = InkWell(onTap: _pickFromDate, borderRadius: borderRadius, child: datePill('Da', _deadlineFrom));
+    final toDate = InkWell(onTap: _pickToDate, borderRadius: borderRadius, child: datePill('A', _deadlineTo));
 
-    final states = InkWell(
-      borderRadius: borderRadius,
-      onTap: _openStatesDialog,
-      child: InputDecorator(
-        decoration: _pillDecoration('Stati', borderRadius).copyWith(contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-        child: Row(children: [
-          const Icon(Icons.filter_list, size: 16, color: Color(0xFF2C3E8C)), const SizedBox(width: 4),
-          Expanded(child: Text(
-            _selectedStates.isEmpty
-              ? 'Tutti'
-              : _selectedStates.length <= 2 ? _selectedStates.map(_getStateShort).join(', ') : '${_selectedStates.length} sel.',
-            style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis,
-          )),
-          const Icon(Icons.arrow_drop_down, size: 18),
-        ]),
-      ),
-    );
-
-    final sort = _buildSortChips();
+    final stateChips = _buildStateChipsCompact(fieldHeight, borderRadius);
+    final sortChips = _buildSortChips(compact: true, height: fieldHeight);
 
     final reset = TextButton.icon(
       style: TextButton.styleFrom(
@@ -254,9 +237,10 @@ class _CaseFiltersState extends State<CaseFilters> {
             const SizedBox(width: 8),
             Expanded(child: wrap(toDate)),
             const SizedBox(width: 8),
-            Expanded(child: wrap(states)),
+            // State chips horizontally scrollable
+            Expanded(flex: 4, child: wrap(stateChips)),
             const SizedBox(width: 8),
-            Expanded(flex: 2, child: wrap(sort)),
+            Expanded(flex: 2, child: wrap(sortChips)),
             const SizedBox(width: 8),
             wrap(reset),
           ],
@@ -265,372 +249,92 @@ class _CaseFiltersState extends State<CaseFilters> {
     );
   }
 
-  Widget _compactDate(String short, DateTime? value, VoidCallback onTap, BorderRadius radius) {
-    return SizedBox(
-      width: 130,
-      child: InkWell(
-        borderRadius: radius,
-        onTap: onTap,
-        child: InputDecorator(
-          decoration: _pillDecoration(short, radius).copyWith(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.date_range, size: 16, color: Colors.grey.shade700),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  value == null ? '—' : _dateFormat.format(value),
-                  style: TextStyle(fontSize: 12, color: value == null ? Colors.grey.shade500 : Colors.black87),
-                  overflow: TextOverflow.ellipsis,
-                ),
+  Widget _buildStateChipsCompact(double height, BorderRadius radius) {
+    final baseColor = const Color(0xFF2C3E8C);
+    return ScrollConfiguration(
+      behavior: const _NoGlowBehavior(),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: CaseState.values.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        itemBuilder: (ctx, i) {
+          final s = CaseState.values[i];
+          final active = _selectedStates.contains(s);
+          return GestureDetector(
+            onTap: () {
+              setState(() {
+                if (active) {
+                  _selectedStates.remove(s);
+                } else {
+                  _selectedStates.add(s);
+                }
+              });
+              widget.onStatesFilter(List.unmodifiable(_selectedStates));
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 140),
+              width: 150, // fixed width for uniform size
+              height: height,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: active ? baseColor.withValues(alpha: 0.18) : baseColor.withValues(alpha: 0.07),
+                borderRadius: radius,
+                border: Border.all(color: active ? baseColor : baseColor.withOpacity(0.3), width: active ? 1 : 1),
               ),
-            ],
-          ),
-        ),
+              alignment: Alignment.center,
+              child: Text(
+                _getStateDisplayName(s),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11.2,
+                  fontWeight: FontWeight.w600,
+                  color: baseColor,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          );
+        },
       ),
     );
   }
 
-  Widget _compactStates(BorderRadius radius) {
-    return SizedBox(
-      width: 170,
-      child: InkWell(
-        borderRadius: radius,
-        onTap: _openStatesDialog, // dialog instead of overlay in compact mode
-        child: InputDecorator(
-          decoration: _pillDecoration('Stati', radius).copyWith(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.filter_list, size: 16, color: Color(0xFF2C3E8C)),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  _selectedStates.isEmpty
-                      ? 'Tutti'
-                      : _selectedStates.length <= 2
-                          ? _selectedStates.map(_getStateShort).join(', ')
-                          : '${_selectedStates.length} sel.',
-                  style: const TextStyle(fontSize: 12),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const Icon(Icons.arrow_drop_down, size: 18, color: Colors.grey),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openStatesDialog() async {
-    // Build a temporary mutable copy
-    final temp = List<CaseState>.from(_selectedStates);
-    final result = await showDialog<List<CaseState>>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Seleziona stati'),
-          content: SizedBox(
-            width: 300,
-            child: StatefulBuilder(
-              builder: (ctx, setInner) => SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ...CaseState.values.map((s) => CheckboxListTile(
-                          dense: true,
-                          visualDensity: VisualDensity.compact,
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(_getStateDisplayName(s), style: const TextStyle(fontSize: 13)),
-                          value: temp.contains(s),
-                          onChanged: (val) {
-                            setInner(() {
-                              if (val == true) {
-                                temp.add(s);
-                              } else {
-                                temp.remove(s);
-                              }
-                            });
-                          },
-                        )),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(null), child: const Text('Annulla')),
-            FilledButton(onPressed: () => Navigator.of(ctx).pop(temp), child: const Text('Applica')),
-          ],
-        );
-      },
-    );
-    if (result != null) {
-      if (mounted) setState(() => _selectedStates = List.unmodifiable(result));
-      widget.onStatesFilter(_selectedStates);
-    }
-  }
-
-  void _toggleStatesOverlay() {
-    if (widget.compact) {
-      _openStatesDialog();
-      return;
-    }
-    if (_statesOverlay == null) {
-      _showStatesOverlay();
-    } else {
-      _removeStatesOverlay();
-    }
-  }
-
-  void _showStatesOverlay() {
-    if (widget.compact) return; // safety guard
-    _draftStates = List.from(_selectedStates);
-    final overlay = Overlay.maybeOf(context); // use maybeOf for proper nullability
-    if (overlay == null) return; // guard when no overlay in hierarchy
-    final renderBox = context.findRenderObject() as RenderBox?;
-    final size = renderBox?.size ?? const Size(0, 0);
-
-    _statesOverlay = OverlayEntry(
-      builder: (ctx) {
-        return Stack(
-          children: [
-            // Dismiss area
-            Positioned.fill(
-              child: GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onTap: _removeStatesOverlay,
-                child: const SizedBox(),
-              ),
-            ),
-            CompositedTransformFollower(
-              link: _statesLink,
-              showWhenUnlinked: false,
-              offset: const Offset(0, 8),
-              child: Material(
-                elevation: 6,
-                borderRadius: BorderRadius.circular(16),
-                clipBehavior: Clip.antiAlias,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minWidth: 220,
-                    maxWidth: 280,
-                    maxHeight: size.height * 0.6 + 240, // fallback
-                  ),
-                  child: Container(
-                    color: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Expanded(
-                          child: Scrollbar(
-                            controller: _statesScrollController,
-                            thumbVisibility: true,
-                            child: ListView(
-                              controller: _statesScrollController,
-                              primary: false,
-                              padding: EdgeInsets.zero,
-                              shrinkWrap: true,
-                              children: [
-                                ...CaseState.values.map((s) => CheckboxListTile(
-                                      dense: true,
-                                      controlAffinity: ListTileControlAffinity.leading,
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                                      visualDensity: VisualDensity.compact,
-                                      title: Text(_getStateDisplayName(s), style: const TextStyle(fontSize: 13)),
-                                      value: _draftStates.contains(s),
-                                      onChanged: (val) {
-                                        if (mounted) setState(() {
-                                          if (val == true) {
-                                            _draftStates.add(s);
-                                          } else {
-                                            _draftStates.remove(s);
-                                          }
-                                          _statesOverlay?.markNeedsBuild();
-                                        });
-                                      },
-                                    )),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const Divider(height: 8),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
-                          child: Row(
-                            children: [
-                              const Spacer(),
-                              TextButton(
-                                onPressed: _removeStatesOverlay,
-                                child: const Text('Chiudi', style: TextStyle(fontSize: 12)),
-                              ),
-                              FilledButton(
-                                onPressed: () {
-                                  if (mounted) setState(() { _selectedStates = List.unmodifiable(_draftStates); });
-                                  widget.onStatesFilter(_selectedStates);
-                                  _removeStatesOverlay();
-                                },
-                                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), minimumSize: Size.zero),
-                                child: const Text('Applica', style: TextStyle(fontSize: 12)),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-
-    overlay.insert(_statesOverlay!);
-    if (mounted) setState(() {});
-  }
-
-  void _removeStatesOverlay() {
-    _statesOverlay?.remove();
-    _statesOverlay = null;
-    if (mounted) setState(() {});
-  }
-
-  void _clearFilters() {
-    _debounce?.cancel();
-    _removeStatesOverlay();
-    if (mounted) setState(() {
-      _selectedStates = [];
-      _searchController.clear();
-      _deadlineFrom = null;
-      _deadlineTo = null;
-    });
-    widget.onStatesFilter(const []);
-    widget.onSearchFilter('');
-    widget.onDeadlineRange(null, null);
-  }
-
-  // === Helper (restored) ===
-  InputDecoration _pillDecoration(String label, BorderRadius radius) => InputDecoration(
-        labelText: label,
-        filled: true,
-        fillColor: Colors.grey.shade100,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-        border: OutlineInputBorder(borderRadius: radius, borderSide: BorderSide(color: Colors.grey.shade300)),
-        enabledBorder: OutlineInputBorder(borderRadius: radius, borderSide: BorderSide(color: Colors.grey.shade300)),
-        focusedBorder: OutlineInputBorder(borderRadius: radius, borderSide: const BorderSide(color: Color(0xFF2C3E8C), width: 1.4)),
-        isDense: false,
-      );
-
-  Widget _pillContainer({required double width, required Widget child}) => SizedBox(width: width, child: child);
-
-  Widget _pillDate({required String label, required DateTime? value, required VoidCallback onTap, required BorderRadius radius}) {
-    return _pillContainer(
-      width: 170,
-      child: InkWell(
-        borderRadius: radius,
-        onTap: onTap,
-        child: InputDecorator(
-          decoration: _pillDecoration(label, radius),
-          child: Row(
-            children: [
-              Icon(Icons.date_range, size: 18, color: Colors.grey.shade700),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  value == null ? '—' : _dateFormat.format(value),
-                  style: TextStyle(fontSize: 13, color: value == null ? Colors.grey.shade500 : Colors.black87),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _pickFromDate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _deadlineFrom ?? now,
-      firstDate: DateTime(now.year - 3),
-      lastDate: DateTime(now.year + 5),
-      helpText: 'Seleziona data',
-    );
-    if (picked != null) {
-      if (mounted) setState(() => _deadlineFrom = DateTime(picked.year, picked.month, picked.day));
-      widget.onDeadlineRange(_deadlineFrom, _deadlineTo);
-    }
-  }
-
-  Future<void> _pickToDate() async {
-    final now = DateTime.now();
-    final base = _deadlineFrom ?? now;
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _deadlineTo ?? base,
-      firstDate: DateTime(now.year - 3),
-      lastDate: DateTime(now.year + 5),
-      helpText: 'Seleziona data',
-    );
-    if (picked != null) {
-      if (mounted) setState(() => _deadlineTo = DateTime(picked.year, picked.month, picked.day, 23, 59, 59, 999));
-      widget.onDeadlineRange(_deadlineFrom, _deadlineTo);
-    }
-  }
-
-  Widget _statesPill(BorderRadius radius) {
-    return CompositedTransformTarget(
-      link: _statesLink,
-      child: _pillContainer(
-        width: 200,
-        child: InkWell(
-          borderRadius: radius,
-            onTap: _toggleStatesOverlay,
-          child: InputDecorator(
-            decoration: _pillDecoration('Stati', radius),
-            child: Row(
-              children: [
-                const Icon(Icons.filter_list, size: 18, color: Color(0xFF2C3E8C)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _selectedStates.isEmpty
-                        ? 'Tutti'
-                        : _selectedStates.length <= 2
-                            ? _selectedStates.map(_getStateShort).join(', ')
-                            : '${_selectedStates.length} selezionati',
-                    style: const TextStyle(fontSize: 13),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Icon(_statesOverlay == null ? Icons.arrow_drop_down : Icons.arrow_drop_up, size: 20, color: Colors.grey),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSortChips() {
+  Widget _buildSortChips({bool compact = false, double? height}) {
     final field = widget.sortField;
     final dir = widget.sortDirection;
+    final base = const Color(0xFF2C3E8C);
 
-    Widget chip({required String label, required String candidate, required IconData icon}) {
+    Widget chipWidget({required String label, required String candidate, required IconData icon}) {
       final active = field == candidate;
       final arrow = active ? (dir == 'asc' ? '↑' : '↓') : '';
-      final base = const Color(0xFF2C3E8C);
+      final inner = Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: compact ? 16 : 18, color: base),
+          const SizedBox(width: 4),
+          Flexible(child: Text(label, style: TextStyle(fontSize: compact ? 12 : 13, fontWeight: FontWeight.w600, color: base), overflow: TextOverflow.ellipsis)),
+          if (arrow.isNotEmpty) ...[
+            const SizedBox(width: 4),
+            Text(arrow, style: TextStyle(fontSize: compact ? 12 : 13, fontWeight: FontWeight.w600, color: base)),
+          ]
+        ],
+      );
+      final content = AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 16, vertical: compact ? 0 : 14),
+        height: compact && height != null ? height : null,
+        decoration: BoxDecoration(
+          color: active ? base.withValues(alpha: 0.18) : base.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(18),
+          border: active ? Border.all(color: base, width: 1) : null,
+        ),
+        alignment: Alignment.center,
+        child: inner,
+      );
       return InkWell(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(18),
         onTap: () {
           if (!active) {
             widget.onSortChange(candidate, 'asc');
@@ -640,27 +344,18 @@ class _CaseFiltersState extends State<CaseFilters> {
             widget.onSortChange(null, null);
           }
         },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            color: active ? base.withValues(alpha: 0.18) : base.withValues(alpha: 0.07),
-            borderRadius: BorderRadius.circular(24),
-            border: active ? Border.all(color: base, width: 1) : null,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 18, color: base),
-              const SizedBox(width: 6),
-              Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: base)),
-              if (arrow.isNotEmpty) ...[
-                const SizedBox(width: 6),
-                Text(arrow, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: base)),
-              ]
-            ],
-          ),
-        ),
+        child: content,
+      );
+    }
+
+    if (compact) {
+      // distribute evenly
+      return Row(
+        children: [
+          Expanded(child: chipWidget(label: 'Scadenza', candidate: 'nextDeadlineDate', icon: Icons.event)),
+          const SizedBox(width: 6),
+          Expanded(child: chipWidget(label: 'Ultima attività', candidate: 'lastModifiedDate', icon: Icons.history)),
+        ],
       );
     }
 
@@ -668,8 +363,8 @@ class _CaseFiltersState extends State<CaseFilters> {
       spacing: 10,
       runSpacing: 8,
       children: [
-        chip(label: 'Scadenza', candidate: 'nextDeadlineDate', icon: Icons.event),
-        chip(label: 'Ultima attività', candidate: 'lastModifiedDate', icon: Icons.history),
+        chipWidget(label: 'Scadenza', candidate: 'nextDeadlineDate', icon: Icons.event),
+        chipWidget(label: 'Ultima attività', candidate: 'lastModifiedDate', icon: Icons.history),
       ],
     );
   }
@@ -719,4 +414,213 @@ class _CaseFiltersState extends State<CaseFilters> {
         return 'Complet.';
     }
   }
+
+  // Removes the overlay for state selection if present
+  void _removeStatesOverlay() {
+    _statesOverlay?.remove();
+    _statesOverlay = null;
+  }
+
+  // Wraps a child widget in a pill-style container
+  Widget _pillContainer({required Widget child, double? width}) {
+    return Container(
+      width: width,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        color: Colors.white,
+        border: Border.all(color: const Color(0xFFE0E0E0)),
+      ),
+      child: child,
+    );
+  }
+
+  // Returns InputDecoration for pill-style fields
+  InputDecoration _pillDecoration(String label, BorderRadius radius) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(fontSize: 13, color: Color(0xFF2C3E8C)),
+      border: OutlineInputBorder(borderRadius: radius, borderSide: BorderSide.none),
+      filled: true,
+      fillColor: Colors.white,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    );
+  }
+
+  // Renders a pill for date selection
+  Widget _pillDate({required String label, required DateTime? value, required VoidCallback onTap, required BorderRadius radius}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: radius,
+      child: InputDecorator(
+        decoration: _pillDecoration(label, radius).copyWith(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.date_range, size: 16),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                value == null ? '—' : _dateFormat.format(value),
+                style: const TextStyle(fontSize: 12),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Renders a pill for state selection, opens overlay on tap
+  Widget _statesPill(BorderRadius radius) {
+    final active = _selectedStates.isNotEmpty;
+    return CompositedTransformTarget(
+      link: _statesLink,
+      child: GestureDetector(
+        onTap: _showStatesOverlay,
+        child: Container(
+          decoration: BoxDecoration(
+            color: active ? const Color(0xFF2C3E8C).withOpacity(0.08) : Colors.white,
+            borderRadius: radius,
+            border: Border.all(color: active ? const Color(0xFF2C3E8C) : const Color(0xFFE0E0E0)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.filter_alt, size: 16, color: Color(0xFF2C3E8C)),
+              const SizedBox(width: 6),
+              Text(
+                active ? _selectedStates.map(_getStateShort).join(', ') : 'Stato',
+                style: TextStyle(fontSize: 12, color: const Color(0xFF2C3E8C)),
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(width: 4),
+              const Icon(Icons.arrow_drop_down, size: 18, color: Color(0xFF2C3E8C)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Shows overlay for state selection
+  void _showStatesOverlay() {
+    _removeStatesOverlay();
+    final overlay = Overlay.of(context);
+    if (overlay == null) return;
+    _draftStates = List.from(_selectedStates);
+    _statesOverlay = OverlayEntry(
+      builder: (context) {
+        return Positioned(
+          width: 260,
+          child: CompositedTransformFollower(
+            link: _statesLink,
+            showWhenUnlinked: false,
+            offset: const Offset(0, 48),
+            child: Material(
+              elevation: 6,
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE0E0E0)),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ...CaseState.values.map((s) => CheckboxListTile(
+                      value: _draftStates.contains(s),
+                      title: Text(_getStateDisplayName(s), style: const TextStyle(fontSize: 13)),
+                      onChanged: (checked) {
+                        setState(() {
+                          if (checked == true) {
+                            _draftStates.add(s);
+                          } else {
+                            _draftStates.remove(s);
+                          }
+                        });
+                      },
+                    )),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _selectedStates = List.from(_draftStates);
+                            });
+                            widget.onStatesFilter(List.unmodifiable(_selectedStates));
+                            _removeStatesOverlay();
+                          },
+                          child: const Text('Applica'),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            _removeStatesOverlay();
+                          },
+                          child: const Text('Annulla'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    overlay.insert(_statesOverlay!);
+  }
+
+  // Handler for picking the 'from' date
+  void _pickFromDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _deadlineFrom ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) {
+      setState(() { _deadlineFrom = picked; });
+      widget.onDeadlineRange(_deadlineFrom, _deadlineTo);
+    }
+  }
+
+  // Handler for picking the 'to' date
+  void _pickToDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _deadlineTo ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) {
+      setState(() { _deadlineTo = picked; });
+      widget.onDeadlineRange(_deadlineFrom, _deadlineTo);
+    }
+  }
+
+  // Resets all filters to default
+  void _clearFilters() {
+    setState(() {
+      _searchController.clear();
+      _selectedStates.clear();
+      _deadlineFrom = null;
+      _deadlineTo = null;
+    });
+    widget.onSearchFilter('');
+    widget.onStatesFilter([]);
+    widget.onDeadlineRange(null, null);
+  }
+}
+
+class _NoGlowBehavior extends ScrollBehavior {
+  const _NoGlowBehavior();
+  @override
+  Widget buildViewportChrome(BuildContext context, Widget child, AxisDirection axisDirection) => child;
 }

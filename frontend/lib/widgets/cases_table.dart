@@ -118,28 +118,60 @@ class _CasesTableDataRowState extends State<CasesTableDataRow> {
         ),
       );
 
+  String _getStateDisplayName(CaseState state) {
+    switch (state) {
+      case CaseState.messaInMoraDaFare:
+        return 'Messa in Mora da Fare';
+      case CaseState.messaInMoraInviata:
+        return 'Messa in Mora Inviata';
+      case CaseState.contestazioneDaRiscontrare:
+        return 'Contestazione da Riscontrare';
+      case CaseState.depositoRicorso:
+        return 'Deposito Ricorso';
+      case CaseState.decretoIngiuntivoDaNotificare:
+        return 'Decreto Ingiuntivo da Notificare';
+      case CaseState.decretoIngiuntivoNotificato:
+        return 'Decreto Ingiuntivo Notificato';
+      case CaseState.precetto:
+        return 'Precetto';
+      case CaseState.pignoramento:
+        return 'Pignoramento';
+      case CaseState.completata:
+        return 'Completata';
+    }
+  }
+
   Widget _buildStateChip(CaseState state) {
     Color color = Colors.grey;
-    String label = '—';
     switch (state) {
-      case CaseState.messaInMoraDaFare: color = Colors.grey; label = 'Mora da Fare'; break;
-      case CaseState.messaInMoraInviata: color = Colors.red; label = 'Mora Inviata'; break;
-      case CaseState.contestazioneDaRiscontrare: color = Colors.amber; label = 'Contest.'; break;
-      case CaseState.depositoRicorso: color = Colors.orange; label = 'Ricorso'; break;
-      case CaseState.decretoIngiuntivoDaNotificare: color = Colors.green; label = 'DI da Not.'; break;
-      case CaseState.decretoIngiuntivoNotificato: color = Colors.teal; label = 'DI Not.'; break;
-      case CaseState.precetto: color = Colors.blue; label = 'Precetto'; break;
-      case CaseState.pignoramento: color = Colors.purple; label = 'Pignor.'; break;
-      case CaseState.completata: color = Colors.green; label = 'Complet.'; break;
+      case CaseState.messaInMoraDaFare: color = Colors.grey; break;
+      case CaseState.messaInMoraInviata: color = Colors.red; break;
+      case CaseState.contestazioneDaRiscontrare: color = Colors.amber; break;
+      case CaseState.depositoRicorso: color = Colors.orange; break;
+      case CaseState.decretoIngiuntivoDaNotificare: color = Colors.green; break;
+      case CaseState.decretoIngiuntivoNotificato: color = Colors.teal; break;
+      case CaseState.precetto: color = Colors.blue; break;
+      case CaseState.pignoramento: color = Colors.purple; break;
+      case CaseState.completata: color = Colors.green; break;
     }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withAlpha(24),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withAlpha(60)),
+    final label = _getStateDisplayName(state);
+    return SizedBox(
+      width: 140, // fixed width for all badges
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withAlpha(24),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: color.withAlpha(60)),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: TextStyle(color: color, fontSize: 11.5, fontWeight: FontWeight.w600),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
-      child: Text(label, style: TextStyle(color: color, fontSize: 11.5, fontWeight: FontWeight.w600)),
     );
   }
 }
