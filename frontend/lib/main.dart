@@ -51,7 +51,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     
     if (token == null) {
       authBloc.add(CheckAuthStatus());
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
       return;
     }
     
@@ -65,14 +65,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
     } else {
       // Valida il token normale
       final isValid = await apiService.validateToken();
-      if (isValid) {
-        authBloc.add(CheckAuthStatus());
-      } else {
-        authBloc.add(CheckAuthStatus());
-      }
+      authBloc.add(CheckAuthStatus());
     }
     
-    setState(() => _isLoading = false);
+    if (mounted) setState(() => _isLoading = false);
   }
 
   @override

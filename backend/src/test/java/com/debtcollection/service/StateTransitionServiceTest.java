@@ -105,20 +105,18 @@ class StateTransitionServiceTest {
     }
 
     @Test
-    void calculateNextDeadline_ShouldThrowException_WhenConfigNotFound() {
+    void calculateNextDeadline_ShouldReturnFallbackDate_WhenConfigNotFound() {
         // Given
         LocalDateTime stateDate = LocalDateTime.of(2025, 1, 15, 10, 0);
         when(stateTransitionConfigRepository.findByFromState(CaseState.MESSA_IN_MORA_DA_FARE))
             .thenReturn(null);
 
-        // When & Then
-        IllegalArgumentException exception = assertThrows(
-            IllegalArgumentException.class,
-            () -> stateTransitionService.calculateNextDeadline(CaseState.MESSA_IN_MORA_DA_FARE, stateDate)
-        );
+        // When
+        LocalDate result = stateTransitionService.calculateNextDeadline(CaseState.MESSA_IN_MORA_DA_FARE, stateDate);
 
-        assertEquals("No transition configuration found for state: MESSA_IN_MORA_DA_FARE",
-                    exception.getMessage());
+        // Then (fallback 30 days)
+        LocalDate expected = stateDate.toLocalDate().plusDays(StateTransitionService.DEFAULT_FALLBACK_DAYS);
+        assertEquals(expected, result);
     }
 
     @Test

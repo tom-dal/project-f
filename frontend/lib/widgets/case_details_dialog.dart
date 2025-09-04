@@ -46,14 +46,14 @@ class _CaseDetailsDialogState extends State<CaseDetailsDialog> {
            _notesController.text.trim() != _originalNotes.trim();
   }
 
+  void safeSetState(VoidCallback fn){ if(!mounted) return; setState(fn); }
+
   void _enterEditMode() {
-    setState(() {
-      _isEditMode = true;
-    });
+    safeSetState(() { _isEditMode = true; });
   }
 
   void _exitEditMode() {
-    setState(() {
+    safeSetState(() {
       _isEditMode = false;
       // Ripristina i valori originali
       _selectedState = _originalState;
@@ -176,9 +176,7 @@ class _CaseDetailsDialogState extends State<CaseDetailsDialog> {
                 }).toList(),
                 onChanged: (value) {
                   if (value != null) {
-                    setState(() {
-                      _selectedState = value;
-                    });
+                    safeSetState(() { _selectedState = value; });
                   }
                 },
               ),
@@ -358,10 +356,13 @@ class _CaseDetailsDialogState extends State<CaseDetailsDialog> {
           notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
         ),
       );
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pratica aggiornata con successo')),
-      );
+      if(mounted) Navigator.of(context).pop();
+      // SnackBar after pop can fail if context is gone: show only if still mounted (parent might keep it)
+      if(mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Pratica aggiornata con successo')),
+        );
+      }
     }
   }
 }

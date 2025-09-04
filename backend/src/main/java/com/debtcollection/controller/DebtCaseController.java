@@ -8,6 +8,7 @@ import com.debtcollection.dto.InstallmentPlanRequest;
 import com.debtcollection.dto.InstallmentPlanResponse;
 import com.debtcollection.dto.InstallmentPaymentRequest;
 import com.debtcollection.dto.CasesSummaryDto;
+import com.debtcollection.dto.InstallmentDto;
 import com.debtcollection.model.CaseState;
 import com.debtcollection.service.DebtCaseService;
 import jakarta.validation.Valid;
@@ -26,7 +27,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/cases")
@@ -217,6 +220,66 @@ public class DebtCaseController {
         return ResponseEntity.ok(debtCaseService.getCasesSummary());
     }
 
+    @GetMapping("/{id}")
+    public ResponseEntity<DebtCaseDto> getDebtCaseById(@PathVariable String id) {
+        return ResponseEntity.ok(debtCaseService.getDebtCaseById(id));
+    }
+
+    @PutMapping("/{id}/next-deadline")
+    public ResponseEntity<?> updateNextDeadline(
+            @PathVariable String id,
+            @Valid @RequestBody NextDeadlineUpdateRequest request
+    ) {
+        try {
+            DebtCaseDto updated = debtCaseService.updateNextDeadline(id, request.nextDeadlineDate());
+            return ResponseEntity.ok(updated);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage(), "error", "IllegalArgumentException"));
+        }
+    }
+
+    @PutMapping("/{id}/installments/{installmentId}")
+    public ResponseEntity<?> updateSingleInstallment(
+            @PathVariable String id,
+            @PathVariable String installmentId,
+            @Valid @RequestBody UpdateInstallmentRequest request
+    ) {
+        try {
+            InstallmentDto dto = debtCaseService.updateSingleInstallment(id, installmentId, request.amount(), request.dueDate());
+            return ResponseEntity.ok(dto);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage(), "error", e.getClass().getSimpleName()));
+        }
+    }
+
+    @PutMapping("/{id}/installment-plan")
+    public ResponseEntity<?> replaceInstallmentPlan(
+            @PathVariable String id,
+            @Valid @RequestBody ReplaceInstallmentPlanRequest request
+    ) {
+        try {
+            InstallmentPlanResponse response = debtCaseService.replaceInstallmentPlan(
+                    id,
+                    request.installments().stream()
+                            .map(i -> new DebtCaseService.InstallmentInput(i.amount(), i.dueDate()))
+                            .collect(Collectors.toList())
+            );
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage(), "error", e.getClass().getSimpleName()));
+        }
+    }
+
+    @DeleteMapping("/{id}/installment-plan")
+    public ResponseEntity<?> deleteInstallmentPlan(@PathVariable String id) {
+        try {
+            DebtCaseDto dto = debtCaseService.deleteInstallmentPlan(id);
+            return ResponseEntity.ok(dto);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage(), "error", e.getClass().getSimpleName()));
+        }
+    }
+
     public record CreateDebtCaseRequest(
         @NotBlank(message = "Debtor name is required")
         @Size(min = 2, max = 255, message = "Debtor name must be between 2 and 255 characters")
@@ -250,5 +313,24 @@ public class DebtCaseController {
         BigDecimal amount,
         @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
         LocalDateTime paymentDate
+    ) {}
+
+    public record NextDeadlineUpdateRequest(
+            @NotNull(message = "nextDeadlineDate is required")
+            LocalDateTime nextDeadlineDate
+    ) {}
+
+    public record UpdateInstallmentRequest(
+            @DecimalMin(value = "0.01", message = "Amount must be > 0") BigDecimal amount,
+            LocalDateTime dueDate
+    ) {}
+
+    public record ReplaceInstallmentPlanRequest(
+            @Size(min = 1, message = "At least one installment required") List<ReplaceInstallmentItem> installments
+    ) {}
+
+    public record ReplaceInstallmentItem(
+            @NotNull(message = "amount required") @DecimalMin(value = "0.01", message = "Amount must be > 0") BigDecimal amount,
+            @NotNull(message = "dueDate required") LocalDateTime dueDate
     ) {}
 }

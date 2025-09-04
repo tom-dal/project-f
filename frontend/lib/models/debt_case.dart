@@ -1,6 +1,7 @@
 import 'package:json_annotation/json_annotation.dart';
 import 'case_state.dart';
 import 'hateoas_response.dart';
+import 'installment.dart';
 
 part 'debt_case.g.dart';
 
@@ -29,7 +30,7 @@ class DebtCase {
   final double? totalPaidAmount;
   final double? remainingAmount;
   final List<dynamic>? payments;
-  final List<dynamic>? installments;
+  final List<Installment>? installments;
   // HATEOAS links
   @JsonKey(name: '_links')
   final HateoasLinks? links;

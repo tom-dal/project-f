@@ -4,53 +4,44 @@ import 'package:intl/intl.dart';
 import '../blocs/debt_case/debt_case_bloc.dart';
 import '../blocs/cases_summary/cases_summary_bloc.dart';
 import '../models/case_state.dart';
-import '../widgets/case_list.dart';
+import '../models/debt_case.dart';
 import '../widgets/create_case_dialog.dart';
 import '../widgets/case_filters.dart';
 import '../widgets/cases_summary_section.dart';
+import '../widgets/cases_table.dart';
+import 'case_detail_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
-
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
   final _dateFormat = DateFormat('dd/MM/yyyy');
-  // USER PREFERENCE: Removed frontend filtering - all filtering now happens on backend
-  String _searchQuery = '';
-  List<CaseState> _statesFilter = []; // USER PREFERENCE: multi-state filter
-  DateTime? _deadlineFrom; // USER PREFERENCE: deadline range from
-  DateTime? _deadlineTo;   // USER PREFERENCE: deadline range to
+  String _searchQuery = '';// USER PREFERENCE: backend filtering
+  List<CaseState> _statesFilter = [];// USER PREFERENCE
+  DateTime? _deadlineFrom;
+  DateTime? _deadlineTo;
   int _currentPage = 0;
-  int _pageSize = 20; // USER PREFERENCE: Made page size configurable
-  static const List<int> _pageSizeOptions = [10, 20, 50, 100]; // USER PREFERENCE: Available page size options
-
-  // USER PREFERENCE: Sorting controllabile da UI (default: scadenza asc)
+  int _pageSize = 20;
+  static const List<int> _pageSizeOptions = [10,20,50,100];
   String? _sortField = 'nextDeadlineDate';
   String _sortDirection = 'asc';
+  bool _isRefreshing = false;
 
-  bool _isRefreshing = false; // USER PREFERENCE: partial refresh indicator
+  // Sticky layout constants
+  static const double _kFiltersHeight = 60;
+  static const double _kPageBarHeight = 48;
+  static const double _kHeaderHeight = CasesTableLayout.rowHeight; // 44
+  double get _stickyTotalHeight => _kFiltersHeight + _kPageBarHeight + _kHeaderHeight;
 
   @override
-  void initState() {
-    super.initState();
-    _loadCases();
-    // Forza il caricamento del riepilogo dopo il primo frame se per qualche motivo non è partito.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      context.read<CasesSummaryBloc>().add(LoadCasesSummary());
-    });
-  }
+  void initState() { super.initState(); _loadCases(); WidgetsBinding.instance.addPostFrameCallback((_) { if (!mounted) return; context.read<CasesSummaryBloc>().add(LoadCasesSummary()); }); }
 
-  // USER PREFERENCE: Load cases with current filters and sorting
   void _loadCases({bool fullLoading = true}) {
     final String? sortParam = _sortField != null ? '$_sortField,$_sortDirection' : null;
-    if (!fullLoading) {
-      setState(() => _isRefreshing = true);
-    }
-    print('[DEBUG] Load cases -> search="$_searchQuery" states=$_statesFilter deadlineFrom=$_deadlineFrom deadlineTo=$_deadlineTo sort=$sortParam page=$_currentPage size=$_pageSize fullLoading=$fullLoading');
+    if(!fullLoading){ setState(()=>_isRefreshing=true);}
     context.read<DebtCaseBloc>().add(LoadCasesPaginated(
       page: _currentPage,
       size: _pageSize,
@@ -61,6 +52,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       sort: sortParam,
       showFullLoading: fullLoading,
     ));
+  }
+
+  void _openCaseDetail(DebtCase debtCase){
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => BlocProvider.value(value: context.read<DebtCaseBloc>(), child: CaseDetailScreen(caseId: debtCase.id, initialCase: debtCase))));
   }
 
   void _showCreateCaseDialog() {
@@ -159,54 +154,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     return 'Ordinamento: —';
   }
+  String _buildPageLabel(DebtCasePaginatedLoaded s)=>'Pagina ${s.currentPage + 1} di ${s.totalPages} - ${s.totalElements} pratiche.';
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFF2C3E8C),
-        title: const Text(
-          'Gestione Recupero Crediti',
-          style: TextStyle(color: Colors.white),
-        ),
+        title: const Text('Gestione Recupero Crediti', style: TextStyle(color: Colors.white)),
         actions: [
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: Color(0xFF2C3E8C),
-            ),
-            onPressed: _showCreateCaseDialog,
-            child: const Text('Nuova Pratica'),
-          ),
-          const SizedBox(width: 12),
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.white,
-              side: const BorderSide(color: Colors.white),
-            ),
-            onPressed: () {},
-            child: const Text('Dashboard'),
-          ),
-          const SizedBox(width: 24),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFF2C3E8C)), onPressed: _showCreateCaseDialog, child: const Text('Nuova Pratica')),
+          const SizedBox(width:12),
+          OutlinedButton(style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white)), onPressed: () {}, child: const Text('Dashboard')),
+          const SizedBox(width:24),
         ],
       ),
       body: MultiBlocListener(
         listeners: [
           BlocListener<DebtCaseBloc, DebtCaseState>(
-            listenWhen: (prev, curr) => curr is DebtCasePaginatedLoaded || curr is DebtCaseError,
-            listener: (context, state) {
-              if (_isRefreshing) {
-                setState(() => _isRefreshing = false);
-              }
-              if (state is DebtCasePaginatedLoaded) {
-                context.read<CasesSummaryBloc>().add(RefreshCasesSummary());
-              }
-            },
+            listenWhen: (p,c)=> c is DebtCasePaginatedLoaded || c is DebtCaseError,
+            listener: (context,state){ if(_isRefreshing) setState(()=>_isRefreshing=false); if(state is DebtCasePaginatedLoaded){ context.read<CasesSummaryBloc>().add(RefreshCasesSummary()); } },
           ),
         ],
         child: Column(
           children: [
-            // Summary section independent from filters
             Padding(
               padding: const EdgeInsets.fromLTRB(24,24,24,8),
               child: CasesSummarySection(
@@ -216,128 +187,149 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 activeStates: _statesFilter,
                 deadlineFrom: _deadlineFrom,
                 deadlineTo: _deadlineTo,
-                onSetStates: (states) { _onStatesFilter(states); },
-                onSetDeadlineRange: (from, to) { _onDeadlineRange(from, to); },
-                onApplyQuickFilter: (states, from, to) { _applyQuickFilter(states: states, from: from, to: to); },
-                onClearAllFilters: () {
-                  _onStatesFilter([]);
-                  _onDeadlineRange(null, null);
-                },
+                onSetStates: (s)=>_onStatesFilter(s),
+                onSetDeadlineRange: (f,t)=>_onDeadlineRange(f,t),
+                onApplyQuickFilter: (s,f,t)=>_applyQuickFilter(states:s, from:f, to:t),
+                onClearAllFilters: (){ _onStatesFilter([]); _onDeadlineRange(null,null); },
               ),
             ),
             Expanded(
-              child: Stack(
-                children: [
-                  BlocBuilder<DebtCaseBloc, DebtCaseState>(
-                    builder: (context, state) {
-                      if (state is DebtCaseLoading) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      if (state is DebtCaseError) {
-                        return Center(child: Text(state.message));
-                      }
-                      if (state is DebtCasePaginatedLoaded) {
-                        return SingleChildScrollView(
-                          padding: const EdgeInsets.fromLTRB(24,8,24,24),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              CaseFilters(
-                                onStatesFilter: _onStatesFilter,
-                                onSearchFilter: _onSearchFilter,
-                                onDeadlineRange: _onDeadlineRange,
-                                selectedStates: _statesFilter, // sync with quick filters
-                                externalDeadlineFrom: _deadlineFrom,
-                                externalDeadlineTo: _deadlineTo,
-                                sortField: _sortField,
-                                sortDirection: _sortDirection,
-                                onSortChange: _onSortChange,
-                              ),
-                              const SizedBox(height: 16),
-                              // Cases table
-                              Card(
-                                elevation: 2,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(24.0),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              'Pagina ${state.currentPage + 1} di ${state.totalPages} - ${state.totalElements} pratiche.',
-                                              style: TextStyle(
-                                                fontSize: 14,
-                                                color: Colors.grey[600],
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Text(
-                                            _currentSortLabel(),
-                                            style: TextStyle(fontSize: 13, color: Colors.grey[700], fontStyle: FontStyle.italic),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 24),
-                                      CaseList(cases: state.cases, dateFormat: _dateFormat),
-                                      const SizedBox(height: 16),
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          ElevatedButton.icon(
-                                            onPressed: state.hasPrevious ? _loadPreviousPage : null,
-                                            icon: const Icon(Icons.chevron_left),
-                                            label: const Text('Precedente'),
-                                          ),
-                                          const SizedBox(width: 16),
-                                          ElevatedButton.icon(
-                                            onPressed: state.hasNext ? _loadNextPage : null,
-                                            icon: const Icon(Icons.chevron_right),
-                                            label: const Text('Successiva'),
-                                          ),
-                                          const SizedBox(width: 32),
-                                          DropdownButton<int>(
-                                            value: _pageSize,
-                                            items: _pageSizeOptions.map((s) => DropdownMenuItem<int>(value: s, child: Text('$s/pg'))).toList(),
-                                            onChanged: _onPageSizeChanged,
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-                      return const SizedBox.shrink();
-                    },
-                  ),
-                  if (_isRefreshing)
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      child: LinearProgressIndicator(
-                        minHeight: 3,
-                        color: const Color(0xFF2C3E8C),
-                        backgroundColor: Colors.transparent,
+              child: BlocBuilder<DebtCaseBloc, DebtCaseState>(
+                builder: (context, state){
+                  if(state is DebtCaseLoading){ return const Center(child:CircularProgressIndicator()); }
+                  if(state is DebtCaseError){ return Center(child: Text(state.message)); }
+                  if(state is! DebtCasePaginatedLoaded){ return const SizedBox.shrink(); }
+                  return Stack(
+                    children: [
+                      // Scrollable content
+                      Positioned.fill(
+                        top: _stickyTotalHeight,
+                        child: _buildCasesList(state),
                       ),
-                    ),
-                ],
+                      // Filters bar
+                      Positioned(
+                        top:0,left:0,right:0,
+                        child: _buildFiltersBar(),
+                      ),
+                      // Pagination / sort bar
+                      Positioned(
+                        top:_kFiltersHeight, left:0,right:0,
+                        child: _buildPageBar(state),
+                      ),
+                      // Table header bar
+                      Positioned(
+                        top:_kFiltersHeight + _kPageBarHeight, left:0,right:0,
+                        child: _buildTableHeader(),
+                      ),
+                      if(_isRefreshing)
+                        Positioned(top:0,left:0,right:0,child: LinearProgressIndicator(minHeight:3,color: const Color(0xFF2C3E8C), backgroundColor: Colors.transparent)),
+                    ],
+                  );
+                },
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildFiltersBar(){
+    return Material(
+      elevation: 2,
+      child: Container(
+        height: _kFiltersHeight,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Color(0xFFE0E0E0)))),
+        child: CaseFilters(
+          compact: true,
+          onStatesFilter: _onStatesFilter,
+          onSearchFilter: _onSearchFilter,
+          onDeadlineRange: _onDeadlineRange,
+          selectedStates: _statesFilter,
+          externalDeadlineFrom: _deadlineFrom,
+          externalDeadlineTo: _deadlineTo,
+          sortField: _sortField,
+          sortDirection: _sortDirection,
+          onSortChange: _onSortChange,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPageBar(DebtCasePaginatedLoaded state){
+    return Material(
+      elevation: 1,
+      child: Container(
+        height: _kPageBarHeight,
+        padding: const EdgeInsets.symmetric(horizontal:24),
+        decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Color(0xFFE0E0E0)) )),
+        child: Row(
+          children: [
+            Expanded(child: Text(_buildPageLabel(state), style: TextStyle(fontSize: 13, color: Colors.grey[700], fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
+            const SizedBox(width:16),
+            Text(_currentSortLabel(), style: TextStyle(fontSize: 12.5, color: Colors.grey[600], fontStyle: FontStyle.italic)),
+            const SizedBox(width:24),
+            _PaginationControls(
+              hasPrev: state.hasPrevious,
+              hasNext: state.hasNext,
+              onPrev: _loadPreviousPage,
+              onNext: _loadNextPage,
+              pageSize: _pageSize,
+              pageSizeOptions: _pageSizeOptions,
+              onPageSizeChanged: _onPageSizeChanged,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTableHeader(){
+    return Material(
+      elevation: 1,
+      child: Container(
+        height: _kHeaderHeight,
+        padding: const EdgeInsets.symmetric(horizontal:24),
+        decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Color(0xFFE0E0E0)) )),
+        child: const CasesTableHeader(),
+      ),
+    );
+  }
+
+  Widget _buildCasesList(DebtCasePaginatedLoaded state){
+    if(state.cases.isEmpty){
+      return const Center(child: Text('Nessuna pratica trovata'));
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.only(bottom: 32),
+      itemCount: state.cases.length,
+      itemBuilder: (ctx,i){
+        final c = state.cases[i];
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal:24),
+          child: CasesTableDataRow(
+            debtCase: c,
+            dateFormat: _dateFormat,
+            onTap: ()=>_openCaseDetail(c),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _PaginationControls extends StatelessWidget {
+  final bool hasPrev; final bool hasNext; final VoidCallback? onPrev; final VoidCallback? onNext; final int pageSize; final List<int> pageSizeOptions; final ValueChanged<int?> onPageSizeChanged;
+  const _PaginationControls({required this.hasPrev, required this.hasNext, this.onPrev, this.onNext, required this.pageSize, required this.pageSizeOptions, required this.onPageSizeChanged});
+  @override
+  Widget build(BuildContext context) {
+    return Row(children: [
+      ElevatedButton.icon(onPressed: hasPrev?onPrev:null, icon: const Icon(Icons.chevron_left), label: const Text('Precedente')),
+      const SizedBox(width:16),
+      ElevatedButton.icon(onPressed: hasNext?onNext:null, icon: const Icon(Icons.chevron_right), label: const Text('Successiva')),
+      const SizedBox(width:32),
+      DropdownButton<int>(value: pageSize, items: pageSizeOptions.map((s)=>DropdownMenuItem<int>(value:s, child: Text('$s/pg'))).toList(), onChanged: onPageSizeChanged),
+    ]);
   }
 }

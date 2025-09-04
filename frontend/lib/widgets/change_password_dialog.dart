@@ -26,6 +26,8 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
     super.dispose();
   }
 
+  void safeSetState(VoidCallback fn){ if(!mounted) return; setState(fn); }
+
   Future<void> _changePassword() async {
     developer.log('🔄 PASSWORD DIALOG - Change password initiated');
     
@@ -38,7 +40,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
     developer.log('🔐 PASSWORD DIALOG - Old password length: ${_oldPasswordController.text.length}');
     developer.log('🔐 PASSWORD DIALOG - New password length: ${_newPasswordController.text.length}');
 
-    setState(() {
+    safeSetState(() {
       _isLoading = true;
       _errorMessage = null;
     });
@@ -57,13 +59,10 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
         developer.log('🔄 PASSWORD DIALOG - AuthBloc state changed: ${state.runtimeType}');
         
         if (state is AuthAuthenticated && !state.passwordExpired) {
-          // Password changed successfully
-          developer.log('✅ PASSWORD DIALOG - Password change successful');
-          setState(() {
-            _isLoading = false;
-          });
-          Navigator.of(context).pop(true);
-          ScaffoldMessenger.of(context).showSnackBar(
+          final messenger = ScaffoldMessenger.of(context); // cache before pop
+          safeSetState(() { _isLoading = false; });
+          if(mounted) Navigator.of(context).pop(true);
+          messenger.showSnackBar(
             const SnackBar(
               content: Text('Password cambiata con successo!'),
               backgroundColor: Colors.green,
@@ -71,19 +70,10 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
             ),
           );
         } else if (state is AuthError) {
-          developer.log('❌ PASSWORD DIALOG - Password change error: ${state.message}');
-          setState(() {
-            _isLoading = false;
-            _errorMessage = state.message;
-          });
+          safeSetState(() { _isLoading = false; _errorMessage = state.message; });
         } else if (state is AuthUnauthenticated) {
-          // Se l'utente viene disconnesso durante il cambio password
-          developer.log('❌ PASSWORD DIALOG - User unauthenticated during password change');
-          setState(() {
-            _isLoading = false;
-            _errorMessage = 'Sessione scaduta. Rieffettua il login.';
-          });
-          Navigator.of(context).pop(false);
+          safeSetState(() { _isLoading = false; _errorMessage = 'Sessione scaduta. Rieffettua il login.'; });
+          if(mounted) Navigator.of(context).pop(false);
         } else if (state is AuthLoading) {
           developer.log('⏳ PASSWORD DIALOG - Auth loading state');
         }

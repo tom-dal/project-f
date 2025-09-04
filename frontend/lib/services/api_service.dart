@@ -848,7 +848,7 @@ class ApiService {
 
   /// Register a payment for a debt case
   Future<Map<String, dynamic>> registerPayment({
-    required int caseId,
+    required String caseId,
     required double amount,
     DateTime? paymentDate,
   }) async {
@@ -1021,21 +1021,23 @@ class ApiService {
   ///
   /// Returns: Map with installment plan details
   Future<Map<String, dynamic>> createInstallmentPlan({
-    required int caseId,
+    required String caseId,
     required int numberOfInstallments,
-    required String firstInstallmentDate,
-    required double monthlyAmount,
+    required DateTime firstInstallmentDueDate,
+    required double installmentAmount,
+    int frequencyDays = 30,
   }) async {
     try {
       _log('🏗️ Creating installment plan for case $caseId');
-      _log('📋 Plan details: $numberOfInstallments installments, first date: $firstInstallmentDate, amount: $monthlyAmount');
+      _log('📋 Plan details: $numberOfInstallments installments, first date: $firstInstallmentDueDate, amount: $installmentAmount');
 
       final response = await _dio.post(
         '/cases/$caseId/installment-plan',
         data: {
           'numberOfInstallments': numberOfInstallments,
-          'firstInstallmentDate': firstInstallmentDate,
-          'monthlyAmount': monthlyAmount,
+          'firstInstallmentDueDate': firstInstallmentDueDate.toIso8601String(),
+          'installmentAmount': installmentAmount,
+          'frequencyDays': frequencyDays,
         },
         options: Options(
           headers: {
@@ -1088,10 +1090,10 @@ class ApiService {
   ///
   /// Returns: Map with payment details
   Future<Map<String, dynamic>> registerInstallmentPayment({
-    required int caseId,
-    required int installmentId,
+    required String caseId,
+    required String installmentId,
     required double amount,
-    required String paymentDate,
+    DateTime? paymentDate,
   }) async {
     try {
       _log('💰 Registering payment for installment $installmentId in case $caseId');
@@ -1101,7 +1103,7 @@ class ApiService {
         '/cases/$caseId/installments/$installmentId/payments',
         data: {
           'amount': amount,
-          'paymentDate': paymentDate,
+          if (paymentDate != null) 'paymentDate': paymentDate.toIso8601String(),
         },
         options: Options(
           headers: {
@@ -1188,6 +1190,99 @@ class ApiService {
     } catch (e) {
       if (e is String) rethrow;
       throw 'Errore imprevisto nel recupero del riepilogo';
+    }
+  }
+
+  Future<DebtCase> getCaseById(String id) async {
+    try {
+      final response = await _dio.get('/cases/$id', options: Options(validateStatus: (s)=>true));
+      if (response.statusCode == 200) {
+        return DebtCase.fromJson(response.data as Map<String,dynamic>);
+      }
+      if (response.statusCode == 401) {
+        await _handleUnauthorizedSafely('/cases/$id');
+        throw 'Sessione scaduta. Effettua nuovamente il login.';
+      }
+      if (response.data is Map) throw response.data['message'] ?? 'Errore caricamento pratica';
+      throw 'Errore caricamento pratica';
+    } on DioException catch(e){
+      if (e.response?.statusCode == 401) {
+        await _handleUnauthorizedSafely('/cases/$id');
+        throw 'Sessione scaduta. Effettua nuovamente il login.';
+      }
+      throw e.message ?? 'Errore di rete';
+    }
+  }
+
+  Future<DebtCase> updateNextDeadline({required String id, required DateTime nextDeadlineDate}) async {
+    try {
+      final response = await _dio.put('/cases/$id/next-deadline', data: {
+        'nextDeadlineDate': nextDeadlineDate.toIso8601String(),
+      }, options: Options(validateStatus: (s)=>true));
+      if (response.statusCode == 200) return DebtCase.fromJson(response.data);
+      if (response.statusCode == 400 && response.data is Map) throw response.data['message'];
+      if (response.statusCode == 401) {
+        await _handleUnauthorizedSafely('/cases/$id/next-deadline');
+        throw 'Sessione scaduta. Effettua nuovamente il login.';
+      }
+      throw 'Aggiornamento scadenza fallito';
+    } on DioException catch(e){
+      if (e.response?.data is Map) throw e.response?.data['message'] ?? 'Errore';
+      throw e.message ?? 'Errore di rete';
+    }
+  }
+
+  Future<Map<String,dynamic>> updateSingleInstallment({required String caseId, required String installmentId, double? amount, DateTime? dueDate}) async {
+    if (amount == null && dueDate == null) throw 'Nessuna modifica';
+    try {
+      final body = <String,dynamic>{};
+      if (amount != null) body['amount'] = amount;
+      if (dueDate != null) body['dueDate'] = dueDate.toIso8601String();
+      final response = await _dio.put('/cases/$caseId/installments/$installmentId', data: body, options: Options(validateStatus: (s)=>true));
+      if (response.statusCode == 200) return response.data as Map<String,dynamic>;
+      if (response.statusCode == 400 && response.data is Map) throw response.data['message'];
+      if (response.statusCode == 401) {
+        await _handleUnauthorizedSafely('/cases/$caseId/installments/$installmentId');
+        throw 'Sessione scaduta';
+      }
+      throw 'Aggiornamento rata fallito';
+    } on DioException catch(e){
+      if (e.response?.data is Map) throw e.response?.data['message'] ?? 'Errore';
+      throw e.message ?? 'Errore';
+    }
+  }
+
+  Future<Map<String,dynamic>> replaceInstallmentPlan({required String caseId, required List<Map<String,dynamic>> installments}) async {
+    try {
+      final response = await _dio.put('/cases/$caseId/installment-plan', data: {
+        'installments': installments,
+      }, options: Options(validateStatus: (s)=>true));
+      if (response.statusCode == 200) return response.data as Map<String,dynamic>;
+      if (response.statusCode == 400 && response.data is Map) throw response.data['message'];
+      if (response.statusCode == 401) {
+        await _handleUnauthorizedSafely('/cases/$caseId/installment-plan');
+        throw 'Sessione scaduta';
+      }
+      throw 'Sostituzione piano fallita';
+    } on DioException catch(e){
+      if (e.response?.data is Map) throw e.response?.data['message'] ?? 'Errore';
+      throw e.message ?? 'Errore';
+    }
+  }
+
+  Future<DebtCase> deleteInstallmentPlan(String caseId) async {
+    try {
+      final response = await _dio.delete('/cases/$caseId/installment-plan', options: Options(validateStatus: (s)=>true));
+      if (response.statusCode == 200) return DebtCase.fromJson(response.data);
+      if (response.statusCode == 400 && response.data is Map) throw response.data['message'];
+      if (response.statusCode == 401) {
+        await _handleUnauthorizedSafely('/cases/$caseId/installment-plan');
+        throw 'Sessione scaduta';
+      }
+      throw 'Eliminazione piano fallita';
+    } on DioException catch(e){
+      if (e.response?.data is Map) throw e.response?.data['message'] ?? 'Errore';
+      throw e.message ?? 'Errore';
     }
   }
 }

@@ -42,13 +42,13 @@ class LoadCasesPaginated extends DebtCaseEvent {
 class CreateDebtCase extends DebtCaseEvent {
   final String debtorName;
   final CaseState initialState;
-  final DateTime lastStateDate;
+  final DateTime? lastStateDate; // CUSTOM IMPLEMENTATION: now optional
   final double amount;
 
   const CreateDebtCase({
     required this.debtorName,
     required this.initialState,
-    required this.lastStateDate,
+    this.lastStateDate,
     required this.amount,
   });
 

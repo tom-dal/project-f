@@ -6,6 +6,7 @@ import com.debtcollection.dto.PaymentDto;
 import com.debtcollection.dto.InstallmentPlanRequest;
 import com.debtcollection.dto.InstallmentPlanResponse;
 import com.debtcollection.dto.CasesSummaryDto;
+import com.debtcollection.dto.InstallmentDto;
 import com.debtcollection.mapper.DebtCaseMapper;
 import com.debtcollection.mapper.PaymentMapper;
 import com.debtcollection.mapper.InstallmentMapper;
@@ -27,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.Map;
+import java.util.Comparator;
 
 @Service
 @RequiredArgsConstructor
@@ -61,12 +63,11 @@ public class DebtCaseService {
             if (nextDeadline != null) {
                 debtCase.setNextDeadlineDate(nextDeadline.atStartOfDay());
             } else {
-                // Fallback: set to 30 days from current state date
                 debtCase.setNextDeadlineDate(currentStateDate.plusDays(30));
             }
         } else {
-            // For completed cases, set next deadline to null or current date
-            debtCase.setNextDeadlineDate(currentStateDate);
+            // CUSTOM IMPLEMENTATION: For completed cases keep deadline null so they never appear in deadline filters
+            debtCase.setNextDeadlineDate(null);
         }
         
         // CUSTOM IMPLEMENTATION: JPA validator will run automatically via @PrePersist
@@ -106,12 +107,10 @@ public class DebtCaseService {
                 if (nextDeadline != null) {
                     debtCase.setNextDeadlineDate(nextDeadline.atStartOfDay());
                 } else {
-                    // Fallback: set to 30 days from new state date
                     debtCase.setNextDeadlineDate(newStateDate.plusDays(30));
                 }
             } else {
-                // For completed cases, set next deadline to current date
-                debtCase.setNextDeadlineDate(newStateDate);
+                debtCase.setNextDeadlineDate(null); // CUSTOM IMPLEMENTATION: null for completed
             }
         }
         
@@ -223,15 +222,11 @@ public class DebtCaseService {
         if (totalPaid.compareTo(debtCase.getOwedAmount()) >= 0 &&
             debtCase.getCurrentState() != CaseState.COMPLETATA) {
             debtCase.setNotes("Case automatically marked as COMPLETATA after payment registration");
-            
-            // Aggiorna i campi diretti
             debtCase.setCurrentState(CaseState.COMPLETATA);
             LocalDateTime completionDate = LocalDateTime.now();
             debtCase.setCurrentStateDate(completionDate);
             debtCase.setPaid(true);
-            
-            // CUSTOM IMPLEMENTATION: Set next deadline for completed case
-            debtCase.setNextDeadlineDate(completionDate);
+            debtCase.setNextDeadlineDate(null); // CUSTOM IMPLEMENTATION: null for completed
         }
 
         debtCaseRepository.save(debtCase);
@@ -413,17 +408,14 @@ public class DebtCaseService {
             if (unpaidInstallments.isEmpty()) {
                 // All installments are paid
                 Double totalPaid = calculateTotalPaidAmount(debtCase);
-
                 if (totalPaid.compareTo(debtCase.getOwedAmount()) >= 0 &&
                     debtCase.getCurrentState() != CaseState.COMPLETATA) {
-
                     debtCase.setNotes("Case automatically marked as COMPLETATA after all installments were paid");
                     debtCase.setCurrentState(CaseState.COMPLETATA);
                     LocalDateTime completionDate = LocalDateTime.now();
                     debtCase.setCurrentStateDate(completionDate);
                     debtCase.setPaid(true);
-                    debtCase.setNextDeadlineDate(completionDate);
-
+                    debtCase.setNextDeadlineDate(null); // CUSTOM IMPLEMENTATION: null for completed
                     debtCaseRepository.save(debtCase);
                 }
             }
@@ -466,4 +458,200 @@ public class DebtCaseService {
             stateCounts
         );
     }
+
+    public record InstallmentInput(BigDecimal amount, LocalDateTime dueDate) {}
+
+    @Transactional(readOnly = true)
+    public DebtCaseDto getDebtCaseById(String id) {
+        DebtCase debtCase = debtCaseRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("DebtCase not found with id: " + id));
+        return debtCaseMapper.toDto(debtCase);
+    }
+
+    @Transactional
+    public DebtCaseDto updateNextDeadline(String id, LocalDateTime nextDeadlineDate) {
+        if (nextDeadlineDate == null) throw new IllegalArgumentException("nextDeadlineDate cannot be null");
+        DebtCase debtCase = debtCaseRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("DebtCase not found with id: " + id));
+        if (debtCase.getCurrentState() != CaseState.COMPLETATA && nextDeadlineDate.isBefore(LocalDateTime.now())) {
+            throw new IllegalArgumentException("La nuova scadenza non può essere nel passato");
+        }
+        if (Boolean.TRUE.equals(debtCase.getHasInstallmentPlan())) {
+            // Validate coherence with earliest unpaid installment
+            debtCase.getInstallments().stream()
+                    .filter(i -> !Boolean.TRUE.equals(i.getPaid()))
+                    .min(Comparator.comparing(Installment::getDueDate))
+                    .ifPresent(firstUnpaid -> {
+                        if (nextDeadlineDate.isAfter(firstUnpaid.getDueDate())) {
+                            throw new IllegalArgumentException("La scadenza non può essere successiva alla prima rata non pagata");
+                        }
+                    });
+        }
+        debtCase.setNextDeadlineDate(nextDeadlineDate);
+        debtCaseRepository.save(debtCase);
+        return debtCaseMapper.toDto(debtCase);
+    }
+
+    @Transactional
+    public InstallmentDto updateSingleInstallment(String debtCaseId, String installmentId, BigDecimal amount, LocalDateTime dueDate) {
+        if (amount == null && dueDate == null) {
+            throw new IllegalArgumentException("Nessun campo da aggiornare");
+        }
+        DebtCase debtCase = debtCaseRepository.findById(debtCaseId)
+                .orElseThrow(() -> new IllegalArgumentException("DebtCase not found with id: " + debtCaseId));
+        if (!Boolean.TRUE.equals(debtCase.getHasInstallmentPlan())) {
+            throw new IllegalStateException("La pratica non ha un piano rate");
+        }
+        Installment installment = debtCase.getInstallments().stream()
+                .filter(i -> installmentId.equals(i.getInstallmentId()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Installment not found with id: " + installmentId));
+        if (Boolean.TRUE.equals(installment.getPaid())) {
+            throw new IllegalStateException("Impossibile modificare una rata già pagata");
+        }
+        if (amount != null) {
+            if (amount.compareTo(BigDecimal.ZERO) <= 0) throw new IllegalArgumentException("Amount must be > 0");
+            installment.setAmount(amount);
+        }
+        if (dueDate != null) {
+            if (dueDate.isBefore(LocalDateTime.now())) {
+                throw new IllegalArgumentException("La data di scadenza non può essere nel passato");
+            }
+            // Validate ordering constraints
+            // previous installment (by date excluding itself)
+            debtCase.getInstallments().stream()
+                    .filter(i -> !i.getInstallmentId().equals(installmentId))
+                    .filter(i -> !Boolean.TRUE.equals(i.getPaid()))
+                    .filter(i -> i.getDueDate().isBefore(installment.getDueDate())) // existing ordering baseline
+                    .min((a,b) -> b.getDueDate().compareTo(a.getDueDate())); // last before
+            // We'll compute neighbors after tentative update
+            LocalDateTime oldDue = installment.getDueDate();
+            installment.setDueDate(dueDate);
+            validateInstallmentOrdering(debtCase, allowPaidPastDates(true));
+            installment.setLastModifiedDate(LocalDateTime.now());
+        }
+        reorderInstallmentNumbers(debtCase);
+        // Recompute next deadline
+        updateNextDeadlineForInstallmentPlan(debtCase);
+        debtCaseRepository.save(debtCase);
+        InstallmentDto dto = installmentMapper.toDto(installment);
+        dto.setDebtCaseId(debtCaseId);
+        return dto;
+    }
+
+    @Transactional
+    public InstallmentPlanResponse replaceInstallmentPlan(String debtCaseId, List<InstallmentInput> installmentsInput) {
+        if (installmentsInput == null || installmentsInput.isEmpty()) {
+            throw new IllegalArgumentException("Lista rate vuota");
+        }
+        DebtCase debtCase = debtCaseRepository.findById(debtCaseId)
+                .orElseThrow(() -> new IllegalArgumentException("DebtCase not found with id: " + debtCaseId));
+        // Block replacement if any existing installment paid
+        boolean anyPaid = debtCase.getInstallments().stream().anyMatch(i -> Boolean.TRUE.equals(i.getPaid()));
+        if (anyPaid) {
+            throw new IllegalStateException("Impossibile sostituire il piano: esistono rate già pagate");
+        }
+        // Validate input ordering and dates
+        List<InstallmentInput> sorted = installmentsInput.stream()
+                .sorted(Comparator.comparing(InstallmentInput::dueDate))
+                .toList();
+        for (int i = 0; i < sorted.size(); i++) {
+            InstallmentInput in = sorted.get(i);
+            if (in.amount() == null || in.amount().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException("Importo rata non valido (index=" + i + ")");
+            }
+            if (in.dueDate() == null) throw new IllegalArgumentException("Data rata mancante (index=" + i + ")");
+            if (in.dueDate().isBefore(LocalDateTime.now())) {
+                throw new IllegalArgumentException("La rata " + (i+1) + " ha una data nel passato");
+            }
+            if (i > 0 && !in.dueDate().isAfter(sorted.get(i-1).dueDate())) {
+                throw new IllegalArgumentException("Le date devono essere strettamente crescenti");
+            }
+        }
+        debtCase.getInstallments().clear();
+        int number = 1;
+        for (InstallmentInput in : sorted) {
+            Installment inst = new Installment();
+            inst.setInstallmentId(UUID.randomUUID().toString());
+            inst.setInstallmentNumber(number++);
+            inst.setAmount(in.amount());
+            inst.setDueDate(in.dueDate());
+            inst.setPaid(false);
+            inst.setCreatedDate(LocalDateTime.now());
+            inst.setLastModifiedDate(LocalDateTime.now());
+            inst.setCreatedBy("system"); // TODO security context
+            inst.setLastModifiedBy("system");
+            debtCase.getInstallments().add(inst);
+        }
+        debtCase.setHasInstallmentPlan(true);
+        debtCase.setNextDeadlineDate(sorted.get(0).dueDate());
+        debtCaseRepository.save(debtCase);
+        InstallmentPlanResponse response = new InstallmentPlanResponse();
+        response.setDebtCaseId(debtCaseId);
+        response.setNumberOfInstallments(debtCase.getInstallments().size());
+        response.setNextDeadlineDate(debtCase.getNextDeadlineDate());
+        response.setInstallments(debtCase.getInstallments().stream().map(installmentMapper::toDto).toList());
+        response.setCreatedDate(LocalDateTime.now());
+        return response;
+    }
+
+    @Transactional
+    public DebtCaseDto deleteInstallmentPlan(String debtCaseId) {
+        DebtCase debtCase = debtCaseRepository.findById(debtCaseId)
+                .orElseThrow(() -> new IllegalArgumentException("DebtCase not found with id: " + debtCaseId));
+        if (!Boolean.TRUE.equals(debtCase.getHasInstallmentPlan())) {
+            throw new IllegalStateException("La pratica non ha un piano rate");
+        }
+        boolean anyPaid = debtCase.getInstallments().stream().anyMatch(i -> Boolean.TRUE.equals(i.getPaid()));
+        if (anyPaid) {
+            throw new IllegalStateException("Impossibile eliminare il piano: esistono rate già pagate");
+        }
+        debtCase.getInstallments().clear();
+        debtCase.setHasInstallmentPlan(false);
+        // Recalculate next deadline based on state
+        if (debtCase.getCurrentState() != CaseState.COMPLETATA) {
+            LocalDate next = stateTransitionService.calculateNextDeadline(debtCase.getCurrentState(), debtCase.getCurrentStateDate());
+            if (next != null) {
+                debtCase.setNextDeadlineDate(next.atStartOfDay());
+            } else {
+                debtCase.setNextDeadlineDate(null);
+            }
+        } else {
+            debtCase.setNextDeadlineDate(null);
+        }
+        debtCaseRepository.save(debtCase);
+        return debtCaseMapper.toDto(debtCase);
+    }
+
+    private void reorderInstallmentNumbers(DebtCase debtCase) {
+        debtCase.getInstallments().sort(Comparator.comparing(Installment::getDueDate));
+        int idx = 1;
+        for (Installment inst : debtCase.getInstallments()) {
+            inst.setInstallmentNumber(idx++);
+        }
+    }
+
+    private void validateInstallmentOrdering(DebtCase debtCase, boolean allowPaidPastDates) {
+        List<Installment> list = debtCase.getInstallments().stream()
+                .sorted(Comparator.comparing(Installment::getDueDate))
+                .toList();
+        LocalDateTime prev = null;
+        for (Installment inst : list) {
+            if (Boolean.TRUE.equals(inst.getPaid())) {
+                if (!allowPaidPastDates && inst.getDueDate().isBefore(LocalDateTime.now())) {
+                    throw new IllegalArgumentException("Rata pagata con data passata non consentita");
+                }
+            } else {
+                if (inst.getDueDate().isBefore(LocalDateTime.now())) {
+                    throw new IllegalArgumentException("Le rate non pagate non possono avere scadenza nel passato");
+                }
+            }
+            if (prev != null && !inst.getDueDate().isAfter(prev)) {
+                throw new IllegalArgumentException("Le date delle rate devono essere strettamente crescenti");
+            }
+            prev = inst.getDueDate();
+        }
+    }
+
+    private boolean allowPaidPastDates(boolean value) { return value; }
 }
