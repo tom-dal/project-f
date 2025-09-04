@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../models/debt_case.dart';
 import '../models/case_state.dart';
 import '../blocs/case_detail/case_detail_bloc.dart';
@@ -33,14 +35,33 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
   final _amountCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  final _amountFocus = FocusNode();
+
+  final NumberFormat _itFormatter = NumberFormat('#,##0.00', 'it_IT');
+  bool _wasSaving = false; // track save transitions
+  bool _initialLoaded = false;
 
   bool _ignorePop = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _amountFocus.addListener(() {
+      if (!_amountFocus.hasFocus) {
+        final parsed = _parseAmount(_amountCtrl.text);
+        if (parsed != null) {
+          _amountCtrl.text = _formatAmount(parsed);
+        }
+      }
+    });
+  }
 
   @override
   void dispose() {
     _debtorCtrl.dispose();
     _amountCtrl.dispose();
     _notesCtrl.dispose();
+    _amountFocus.dispose();
     super.dispose();
   }
 
@@ -49,17 +70,20 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
     return BlocConsumer<CaseDetailBloc, CaseDetailState>(
       listener: (context, state) {
         if (state is CaseDetailLoaded) {
-          _debtorCtrl.text = state.debtorName;
-          _amountCtrl.text = state.owedAmount.toStringAsFixed(2);
-          _notesCtrl.text = state.notes ?? '';
-          if (!state.saving && state.error == null) {
-            // Optionally show success snackbar after save
-          }
-          if (state.error != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.error!), backgroundColor: Colors.redAccent),
-            );
-          }
+            // Detect save completion (avoid first load)
+            if (_initialLoaded && _wasSaving && !state.saving && state.error == null) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Salvato'), behavior: SnackBarBehavior.floating, duration: Duration(seconds: 2)));
+            }
+            _initialLoaded = true;
+            _wasSaving = state.saving;
+            _debtorCtrl.text = state.debtorName;
+            _amountCtrl.text = _formatAmount(state.owedAmount);
+            _notesCtrl.text = state.notes ?? '';
+            if (state.error != null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(state.error!), backgroundColor: Colors.redAccent),
+              );
+            }
         } else if (state is CaseDetailDeleted) {
           // Refresh main list
             final debtBloc = context.read<DebtCaseBloc>();
@@ -87,7 +111,7 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
         final s = state as CaseDetailLoaded;
         return PopScope(
           canPop: true,
-          onPopInvoked: (didPop) async {
+          onPopInvokedWithResult: (didPop, result) async {
             if (_ignorePop || didPop) return;
             if (s.dirty || s.installmentDirty.isNotEmpty || s.replacingPlan) {
               final leave = await _confirmDiscard(context);
@@ -183,14 +207,20 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _amountCtrl,
+              focusNode: _amountFocus,
               decoration: const InputDecoration(labelText: 'Importo dovuto (€)'),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
               onChanged: (v){
-                final parsed = double.tryParse(v.replaceAll(',', '.'));
+                final parsed = _parseAmount(v);
                 if (parsed!=null) bloc.add(EditOwedAmount(parsed));
               },
+              onEditingComplete: () {
+                final parsed = _parseAmount(_amountCtrl.text);
+                if (parsed!=null) _amountCtrl.text = _formatAmount(parsed);
+              },
               validator: (v){
-                final parsed = double.tryParse((v??'').replaceAll(',', '.'));
+                final parsed = _parseAmount(v??'');
                 if (parsed==null || parsed<=0) return 'Importo non valido';
                 return null;
               },
@@ -223,7 +253,6 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
                               helpText: 'Seleziona nuova scadenza',
                             );
                             if (picked!=null) {
-                              // Keep time part midnight
                               final dateTime = DateTime(picked.year, picked.month, picked.day, 0,0,0);
                               context.read<CaseDetailBloc>().add(EditNextDeadline(dateTime));
                             }
@@ -246,11 +275,32 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
               ],
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              controller: _notesCtrl,
-              decoration: const InputDecoration(labelText: 'Note', alignLabelWithHint: true),
-              maxLines: 4,
-              onChanged: (v)=>bloc.add(EditNotes(v.isEmpty?null:v)),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _notesCtrl,
+                    decoration: const InputDecoration(labelText: 'Note', alignLabelWithHint: true, hintText: 'Inserisci eventuali annotazioni'),
+                    maxLines: 4,
+                    onChanged: (v)=>bloc.add(EditNotes(v.isEmpty?null:v)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    TextButton.icon(
+                      icon: const Icon(Icons.clear, size: 18),
+                      label: const Text('Svuota note'),
+                      onPressed: _notesCtrl.text.isEmpty ? null : () {
+                        _notesCtrl.clear();
+                        bloc.add(EditNotes(null));
+                        setState(() {});
+                      },
+                    ),
+                  ],
+                )
+              ],
             ),
             const SizedBox(height: 12),
             Align(
@@ -330,41 +380,44 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
                   rows: list.map((inst) {
                     final isPlaceholder = inst.id.startsWith('tmp-');
                     final dirty = s.installmentDirty.contains(inst.id) || isPlaceholder;
-                    return DataRow(cells: [
-                      DataCell(Text(inst.installmentNumber.toString())),
-                      DataCell(_AmountCell(
-                        amount: inst.amount,
-                        enabled: !isPlaceholder || true,
-                        onChanged: (val){
-                          final parsed = double.tryParse(val.replaceAll(',', '.'));
-                          if (parsed!=null) bloc.add(UpdateInstallmentLocal(installmentId: inst.id, amount: parsed));
-                        },
-                      )),
-                      DataCell(_DueDateCell(
-                        date: inst.dueDate,
-                        enabled: !isPlaceholder || true,
-                        onPick: (d){
-                          bloc.add(UpdateInstallmentLocal(installmentId: inst.id, dueDate: d));
-                        },
-                      )),
-                      DataCell(Text(inst.paid==true? 'Pagata' : 'Da pagare', style: TextStyle(color: inst.paid==true? Colors.green: Colors.orange))),
-                      DataCell(Row(
-                        children: [
-                          if (!isPlaceholder)
-                            IconButton(
-                              tooltip: 'Salva rata',
-                              icon: const Icon(Icons.save, size: 18),
-                              onPressed: dirty && !s.replacingPlan && !s.saving ? ()=> bloc.add(SaveSingleInstallment(inst.id)) : null,
-                            ),
-                          if (isPlaceholder)
-                            IconButton(
-                              tooltip: 'Rimuovi',
-                              icon: const Icon(Icons.close, size: 18, color: Colors.red),
-                              onPressed: ()=> bloc.add(RemoveNewInstallmentPlaceholder(inst.id)),
-                            ),
-                        ],
-                      )),
-                    ]);
+                    final rowColor = dirty ? Colors.amber.withValues(alpha: 0.12) : null;
+                    return DataRow(
+                      color: rowColor != null ? WidgetStatePropertyAll(rowColor) : null,
+                      cells: [
+                        DataCell(Row(children:[Text(inst.installmentNumber.toString()), if(dirty) const SizedBox(width:4), if(dirty) const Text('*', style: TextStyle(color: Colors.orange,fontWeight: FontWeight.bold))])),
+                        DataCell(_AmountCell(
+                          amount: inst.amount,
+                          enabled: !isPlaceholder || true,
+                          formatter: _itFormatter,
+                          onChanged: (val){
+                            final parsed = _parseAmount(val);
+                            if (parsed!=null) bloc.add(UpdateInstallmentLocal(installmentId: inst.id, amount: parsed));
+                          },
+                        )),
+                        DataCell(_DueDateCell(
+                          date: inst.dueDate,
+                          enabled: !isPlaceholder || true,
+                          onPick: (d){ bloc.add(UpdateInstallmentLocal(installmentId: inst.id, dueDate: d)); },
+                        )),
+                        DataCell(Text(inst.paid==true? 'Pagata' : 'Da pagare', style: TextStyle(color: inst.paid==true? Colors.green: Colors.orange))),
+                        DataCell(Row(
+                          children: [
+                            if (!isPlaceholder)
+                              IconButton(
+                                tooltip: 'Salva rata',
+                                icon: const Icon(Icons.save, size: 18),
+                                onPressed: dirty && !s.replacingPlan && !s.saving ? ()=> bloc.add(SaveSingleInstallment(inst.id)) : null,
+                              ),
+                            if (isPlaceholder)
+                              IconButton(
+                                tooltip: 'Rimuovi',
+                                icon: const Icon(Icons.close, size: 18, color: Colors.red),
+                                onPressed: ()=> bloc.add(RemoveNewInstallmentPlaceholder(inst.id)),
+                              ),
+                          ],
+                        )),
+                      ],
+                    );
                   }).toList(),
                 ),
               ),
@@ -484,11 +537,19 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
       case CaseState.completata: return 'Completata';
     }
   }
+
+  String _formatAmount(double v){
+    return _itFormatter.format(v).replaceAll('\u00A0', '');
+  }
+  double? _parseAmount(String raw){
+    final cleaned = raw.trim().replaceAll('.', '').replaceAll(',', '.');
+    return double.tryParse(cleaned);
+  }
 }
 
 class _AmountCell extends StatefulWidget {
-  final double amount; final bool enabled; final ValueChanged<String> onChanged;
-  const _AmountCell({required this.amount, required this.enabled, required this.onChanged});
+  final double amount; final bool enabled; final ValueChanged<String> onChanged; final NumberFormat? formatter;
+  const _AmountCell({required this.amount, required this.enabled, required this.onChanged, this.formatter});
   @override
   State<_AmountCell> createState() => _AmountCellState();
 }
@@ -505,13 +566,22 @@ class _AmountCellState extends State<_AmountCell> {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 100,
+      width: 110,
       child: TextField(
         controller: _c,
         enabled: widget.enabled,
         decoration: const InputDecoration(border: InputBorder.none, isDense: true),
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
         onChanged: widget.onChanged,
+        onEditingComplete: () {
+          final raw = _c.text.trim();
+          final cleaned = raw.replaceAll('.', '').replaceAll(',', '.');
+          final parsed = double.tryParse(cleaned);
+          if (parsed!=null) {
+            _c.text = widget.formatter != null ? widget.formatter!.format(parsed).replaceAll('\u00A0','') : parsed.toStringAsFixed(2);
+          }
+        },
       ),
     );
   }

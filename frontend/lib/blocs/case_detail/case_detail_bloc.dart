@@ -136,7 +136,25 @@ class CaseDetailBloc extends Bloc<CaseDetailEvent, CaseDetailState> {
     on<EditOwedAmount>((e, emit)=>_editField(emit, owedAmount: e.value));
     on<EditState>((e, emit)=>_editField(emit, state: e.value));
     on<EditNextDeadline>((e, emit)=>_editField(emit, nextDeadline: e.value));
-    on<EditNotes>((e, emit)=>_editField(emit, notes: e.value));
+    on<EditNotes>((e, emit){
+      final s = state; if (s is! CaseDetailLoaded) return;
+      // Create new state allowing notes to become null
+      emit(CaseDetailLoaded(
+        caseData: s.caseData,
+        debtorName: s.debtorName,
+        owedAmount: s.owedAmount,
+        state: s.state,
+        nextDeadline: s.nextDeadline,
+        notes: e.value, // can be null
+        ongoingNegotiations: s.ongoingNegotiations,
+        dirty: true,
+        saving: s.saving,
+        localInstallments: s.localInstallments,
+        installmentDirty: s.installmentDirty,
+        replacingPlan: s.replacingPlan,
+        error: null,
+      ));
+    });
     on<EditOngoingNegotiations>((e, emit)=>_editField(emit, ongoingNegotiations: e.value));
     on<SaveCaseEdits>(_onSaveCase);
     on<CreateInstallmentPlanEvent>(_onCreatePlan);
@@ -192,6 +210,8 @@ class CaseDetailBloc extends Bloc<CaseDetailEvent, CaseDetailState> {
     if (s is! CaseDetailLoaded) return;
     emit(s.copyWith(saving: true, error: null));
     try {
+      final bool notesChanged = s.notes != s.caseData.notes;
+      final bool clearingNotes = notesChanged && (s.notes == null || s.notes!.isEmpty);
       final updated = await api.updateDebtCase(
         debtCase: s.caseData,
         debtorName: s.debtorName != s.caseData.debtorName ? s.debtorName : null,
@@ -199,7 +219,8 @@ class CaseDetailBloc extends Bloc<CaseDetailEvent, CaseDetailState> {
         currentState: s.state != s.caseData.state ? s.state : null,
         nextDeadlineDate: s.nextDeadline != s.caseData.nextDeadlineDate ? s.nextDeadline : null,
         ongoingNegotiations: s.ongoingNegotiations != (s.caseData.ongoingNegotiations ?? false) ? s.ongoingNegotiations : null,
-        notes: s.notes != s.caseData.notes ? s.notes : null,
+        notes: (notesChanged && !clearingNotes) ? s.notes : null,
+        clearNotes: clearingNotes ? true : null,
       );
       final map = <String, Installment>{ for (final inst in (updated.installments ?? [])) inst.id : inst };
       emit(CaseDetailLoaded(
