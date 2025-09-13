@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import '../models/debt_case.dart';
 import '../models/case_state.dart';
 import '../blocs/debt_case/debt_case_bloc.dart';
-import '../screens/case_detail_screen.dart';
+import '../screens/case_detail_read_only_screen.dart';
 
 class CaseList extends StatelessWidget {
   final List<DebtCase> cases;
@@ -79,7 +79,7 @@ class CaseList extends StatelessWidget {
       MaterialPageRoute(
         builder: (_) => BlocProvider.value(
           value: context.read<DebtCaseBloc>(),
-          child: CaseDetailScreen(caseId: debtCase.id, initialCase: debtCase),
+          child: CaseDetailReadOnlyScreen(caseId: debtCase.id, initialCase: debtCase),
         ),
       ),
     );

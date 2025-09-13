@@ -9,7 +9,7 @@ import '../widgets/create_case_dialog.dart';
 import '../widgets/case_filters.dart';
 import '../widgets/cases_summary_section.dart';
 import '../widgets/cases_table.dart';
-import 'case_detail_screen.dart';
+import 'case_detail_read_only_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -55,7 +55,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _openCaseDetail(DebtCase debtCase){
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => BlocProvider.value(value: context.read<DebtCaseBloc>(), child: CaseDetailScreen(caseId: debtCase.id, initialCase: debtCase))));
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => BlocProvider.value(value: context.read<DebtCaseBloc>(), child: CaseDetailReadOnlyScreen(caseId: debtCase.id, initialCase: debtCase))));
   }
 
   void _showCreateCaseDialog() {

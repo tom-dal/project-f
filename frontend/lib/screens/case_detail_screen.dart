@@ -156,7 +156,6 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  _buildHeaderChips(s),
                   const SizedBox(height: 12),
                   _buildGeneralSection(context, s),
                   const SizedBox(height: 24),
@@ -168,23 +167,6 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
           ),
         );
       },
-    );
-  }
-
-  Widget _buildHeaderChips(CaseDetailLoaded s) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        _chip('Stato: ${_readableState(s.state)}', Colors.blue),
-        if (s.nextDeadline != null)
-          _chip('Scadenza: ${_fmtDate(s.nextDeadline!)}', Colors.orange),
-        _chip(s.ongoingNegotiations ? 'Negoziazione attiva' : 'Nessuna negoziazione', s.ongoingNegotiations ? Colors.green : Colors.grey),
-        if (s.caseData.hasInstallmentPlan == true)
-          _chip('Rateizzazione', Colors.teal),
-        if (s.caseData.paid == true)
-          _chip('Pagata', Colors.green),
-      ],
     );
   }
 
@@ -295,7 +277,7 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
                 const SizedBox(width: 12),
                 Column(
                   children: [
-                    const Text('Negoziazione'),
+                    const Text('Negoziazione in corso'),
                     Switch(
                       value: s.ongoingNegotiations,
                       onChanged: (v)=>bloc.add(EditOngoingNegotiations(v)),
@@ -561,8 +543,8 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
       case CaseState.messaInMoraInviata: return 'Messa in mora inviata';
       case CaseState.contestazioneDaRiscontrare: return 'Contestazione da riscontrare';
       case CaseState.depositoRicorso: return 'Deposito ricorso';
-      case CaseState.decretoIngiuntivoDaNotificare: return 'DI da notificare';
-      case CaseState.decretoIngiuntivoNotificato: return 'DI notificato';
+      case CaseState.decretoIngiuntivoDaNotificare: return 'D.I. da notificare';
+      case CaseState.decretoIngiuntivoNotificato: return 'D.I. notificato';
       case CaseState.precetto: return 'Precetto';
       case CaseState.pignoramento: return 'Pignoramento';
       case CaseState.completata: return 'Completata';
@@ -677,7 +659,7 @@ class _CreatePlanForm extends StatefulWidget {
 class _CreatePlanFormState extends State<_CreatePlanForm> {
   final _formKey = GlobalKey<FormState>();
   final _nCtrl = TextEditingController(text: '3');
-  final _amountCtrl = TextEditingController(text: '100.00');
+  final _amountCtrl = TextEditingController(text: '100,00'); // USER PREFERENCE: default decimal separator is comma
   DateTime? _firstDate;
   final _freqCtrl = TextEditingController(text: '30');
 
