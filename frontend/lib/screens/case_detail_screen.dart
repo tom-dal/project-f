@@ -36,6 +36,7 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
   final _notesCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   final _amountFocus = FocusNode();
+  final _notesFocus = FocusNode();
 
   final NumberFormat _itFormatter = NumberFormat('#,##0.00', 'it_IT');
   bool _wasSaving = false; // track save transitions
@@ -62,6 +63,7 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
     _amountCtrl.dispose();
     _notesCtrl.dispose();
     _amountFocus.dispose();
+    _notesFocus.dispose();
     super.dispose();
   }
 
@@ -73,12 +75,25 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
             // Detect save completion (avoid first load)
             if (_initialLoaded && _wasSaving && !state.saving && state.error == null) {
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Salvato'), behavior: SnackBarBehavior.floating, duration: Duration(seconds: 2)));
+              // Aggiorna sempre le note dopo il salvataggio, anche se il campo è in focus
+              _notesCtrl.text = state.notes ?? '';
+            } else if (!_notesFocus.hasFocus && _notesCtrl.text != (state.notes ?? '')) {
+              // Aggiorna le note solo se non in focus e il valore è diverso
+              _notesCtrl.text = state.notes ?? '';
             }
             _initialLoaded = true;
             _wasSaving = state.saving;
             _debtorCtrl.text = state.debtorName;
-            _amountCtrl.text = _formatAmount(state.owedAmount);
-            _notesCtrl.text = state.notes ?? '';
+            // Aggiorna l'importo solo se il campo non è in focus e il valore è diverso
+            if (!_amountFocus.hasFocus) {
+              final formatted = _formatAmount(state.owedAmount);
+              if (_amountCtrl.text != formatted) {
+                _amountCtrl.value = TextEditingValue(
+                  text: formatted,
+                  selection: TextSelection.collapsed(offset: formatted.length),
+                );
+              }
+            }
             if (state.error != null) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text(state.error!), backgroundColor: Colors.redAccent),
@@ -210,7 +225,19 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
               focusNode: _amountFocus,
               decoration: const InputDecoration(labelText: 'Importo dovuto (€)'),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                FilteringTextInputFormatter.deny(RegExp(r'([.,].*[.,])')),
+                // Limita a massimo 2 decimali
+                TextInputFormatter.withFunction((oldValue, newValue) {
+                  final text = newValue.text;
+                  final parts = text.split(RegExp(r'[.,]'));
+                  if (parts.length == 2 && parts[1].length > 2) {
+                    return oldValue;
+                  }
+                  return newValue;
+                }),
+              ],
               onChanged: (v){
                 final parsed = _parseAmount(v);
                 if (parsed!=null) bloc.add(EditOwedAmount(parsed));
@@ -222,6 +249,9 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
               validator: (v){
                 final parsed = _parseAmount(v??'');
                 if (parsed==null || parsed<=0) return 'Importo non valido';
+                // max 2 decimals
+                final decimals = v?.split(RegExp(r'[.,]')).length == 2 ? v?.split(RegExp(r'[.,]'))[1].length : 0;
+                if (decimals != null && decimals > 2) return 'Max 2 decimali';
                 return null;
               },
             ),
@@ -280,6 +310,7 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
                 Expanded(
                   child: TextFormField(
                     controller: _notesCtrl,
+                    focusNode: _notesFocus,
                     decoration: const InputDecoration(labelText: 'Note', alignLabelWithHint: true, hintText: 'Inserisci eventuali annotazioni'),
                     maxLines: 4,
                     onChanged: (v)=>bloc.add(EditNotes(v.isEmpty?null:v)),
@@ -555,12 +586,16 @@ class _AmountCell extends StatefulWidget {
 }
 class _AmountCellState extends State<_AmountCell> {
   late TextEditingController _c;
-  @override void initState(){ super.initState(); _c = TextEditingController(text: widget.amount.toStringAsFixed(2)); }
+  @override void initState(){
+    super.initState();
+    _c = TextEditingController(text: widget.amount.toStringAsFixed(2).replaceAll('.', ',')); // USER PREFERENCE: default decimal separator is comma
+  }
   @override void dispose(){ _c.dispose(); super.dispose(); }
   @override void didUpdateWidget(covariant _AmountCell oldWidget){
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.amount != widget.amount && _c.text != widget.amount.toStringAsFixed(2)) {
-      _c.text = widget.amount.toStringAsFixed(2);
+    final newText = widget.amount.toStringAsFixed(2).replaceAll('.', ','); // USER PREFERENCE: default decimal separator is comma
+    if (oldWidget.amount != widget.amount && _c.text != newText) {
+      _c.text = newText;
     }
   }
   @override
@@ -572,14 +607,28 @@ class _AmountCellState extends State<_AmountCell> {
         enabled: widget.enabled,
         decoration: const InputDecoration(border: InputBorder.none, isDense: true),
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+        inputFormatters: [
+          FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+          FilteringTextInputFormatter.deny(RegExp(r'([.,].*[.,])')),
+          // Limita a massimo 2 decimali
+          TextInputFormatter.withFunction((oldValue, newValue) {
+            final text = newValue.text;
+            final parts = text.split(RegExp(r'[.,]'));
+            if (parts.length == 2 && parts[1].length > 2) {
+              return oldValue;
+            }
+            return newValue;
+          }),
+        ],
         onChanged: widget.onChanged,
         onEditingComplete: () {
           final raw = _c.text.trim();
           final cleaned = raw.replaceAll('.', '').replaceAll(',', '.');
           final parsed = double.tryParse(cleaned);
           if (parsed!=null) {
-            _c.text = widget.formatter != null ? widget.formatter!.format(parsed).replaceAll('\u00A0','') : parsed.toStringAsFixed(2);
+            // Format with comma as decimal separator
+            final formatted = (widget.formatter != null ? widget.formatter!.format(parsed) : parsed.toStringAsFixed(2)).replaceAll('.', ',').replaceAll('\u00A0','');
+            _c.text = formatted;
           }
         },
       ),
@@ -648,6 +697,7 @@ class _CreatePlanFormState extends State<_CreatePlanForm> {
                   controller: _nCtrl,
                   decoration: const InputDecoration(labelText: 'Numero rate'),
                   keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   validator: (v){ final n = int.tryParse(v??''); if (n==null||n<1) return 'Min 1'; return null; },
                 ),
               ),
@@ -657,7 +707,26 @@ class _CreatePlanFormState extends State<_CreatePlanForm> {
                   controller: _amountCtrl,
                   decoration: const InputDecoration(labelText: 'Importo rata (€)'),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  validator: (v){ final d = double.tryParse((v??'').replaceAll(',', '.')); if (d==null||d<=0) return 'Importo'; return null; },
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                    FilteringTextInputFormatter.deny(RegExp(r'([.,].*[.,])')),
+                    // Limita a massimo 2 decimali
+                    TextInputFormatter.withFunction((oldValue, newValue) {
+                      final text = newValue.text;
+                      final parts = text.split(RegExp(r'[.,]'));
+                      if (parts.length == 2 && parts[1].length > 2) {
+                        return oldValue;
+                      }
+                      return newValue;
+                    }),
+                  ],
+                  validator: (v){
+                    final d = double.tryParse((v??'').replaceAll(',', '.'));
+                    if (d==null||d<=0) return 'Importo';
+                    final decimals = v?.split(RegExp(r'[.,]')).length == 2 ? v?.split(RegExp(r'[.,]'))[1].length : 0;
+                    if (decimals != null && decimals > 2) return 'Max 2 decimali';
+                    return null;
+                  },
                 ),
               ),
             ],
@@ -695,6 +764,7 @@ class _CreatePlanFormState extends State<_CreatePlanForm> {
                   controller: _freqCtrl,
                   decoration: const InputDecoration(labelText: 'Frequenza (giorni)'),
                   keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   validator: (v){ final n = int.tryParse(v??''); if (n==null||n<1) return 'Min 1'; return null; },
                 ),
               ),

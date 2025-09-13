@@ -17,6 +17,7 @@ public class DebtCaseDto {
     private String debtorName;
     private BigDecimal owedAmount;
     private CaseState state;
+    private String notes;
     private LocalDateTime createdDate;
     private LocalDateTime updatedDate;
     private LocalDateTime lastStateDate;

@@ -23,6 +23,7 @@ public class DebtCaseMapper {
         dto.setDebtorName(debtCase.getDebtorName());
         dto.setOwedAmount(debtCase.getOwedAmount() != null ? BigDecimal.valueOf(debtCase.getOwedAmount()) : null);
         dto.setState(debtCase.getCurrentState());
+        dto.setNotes(debtCase.getNotes());
         dto.setCreatedDate(debtCase.getCreatedDate());
         dto.setUpdatedDate(debtCase.getLastModifiedDate());
         dto.setLastStateDate(debtCase.getCurrentStateDate());
