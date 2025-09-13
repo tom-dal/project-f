@@ -337,6 +337,11 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
   Widget _buildInstallmentsSection(BuildContext context, CaseDetailLoaded s) {
     final bloc = context.read<CaseDetailBloc>();
 
+    // Nascondi la sezione rateizzazione se lo stato selezionato è completata
+    if (s.state == CaseState.completata) {
+      return const SizedBox.shrink();
+    }
+
     if (s.caseData.hasInstallmentPlan != true) {
       return Card(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.grey.shade300)),
