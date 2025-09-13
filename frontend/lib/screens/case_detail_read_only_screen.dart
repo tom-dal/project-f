@@ -8,7 +8,6 @@ import '../blocs/case_detail/case_detail_bloc.dart';
 import '../services/api_service.dart';
 import 'case_detail_screen.dart';
 
-/// Read-only detail view. Navigates to editable screen on user action.
 class CaseDetailReadOnlyScreen extends StatelessWidget {
   final String caseId;
   final DebtCase initialCase;
@@ -44,7 +43,6 @@ class _CaseDetailReadOnlyView extends StatelessWidget {
           );
         }
         if (state is CaseDetailDeleted) {
-          // Return empty scaffold if deleted while on read-only (rare).
           return const Scaffold();
         }
         final s = state as CaseDetailLoaded;
@@ -59,20 +57,42 @@ class _CaseDetailReadOnlyView extends StatelessWidget {
               ),
             ],
           ),
+          body: LayoutBuilder(
+            builder: (ctx, constraints) {
+              final wide = constraints.maxWidth > 780;
+              return SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 24),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1100),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _HeaderSection(s: s),
+                        const SizedBox(height: 32),
+                        _SectionTitle('Dati pratica'),
+                        const SizedBox(height: 8),
+                        _FieldsGrid(s: s, twoColumns: wide),
+                        const SizedBox(height: 32),
+                        _SectionTitle('Note'),
+                        const SizedBox(height: 8),
+                        _NotesSection(notes: s.notes),
+                        const SizedBox(height: 32),
+                        _SectionTitle('Rateizzazione'),
+                        const SizedBox(height: 8),
+                        _InstallmentsPreview(s: s),
+                        const SizedBox(height: 32),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
           floatingActionButton: FloatingActionButton.extended(
             onPressed: () => _openEdit(context, s),
             icon: const Icon(Icons.edit),
             label: const Text('Modifica'),
-          ),
-          body: LayoutBuilder(
-            builder: (ctx, constraints) {
-              final wide = constraints.maxWidth > 780; // heuristic for two columns
-              final content = _DetailContent(s: s, twoColumns: wide);
-              return SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: content,
-              );
-            },
           ),
         );
       },
@@ -88,115 +108,134 @@ class _CaseDetailReadOnlyView extends StatelessWidget {
   }
 }
 
-class _DetailContent extends StatelessWidget {
+class _HeaderSection extends StatelessWidget {
   final CaseDetailLoaded s;
-  final bool twoColumns;
-  const _DetailContent({required this.s, required this.twoColumns});
-
+  const _HeaderSection({required this.s});
   @override
   Widget build(BuildContext context) {
     final fmtCurrency = NumberFormat('#,##0.00', 'it_IT');
-    final List<_FieldData> fields = [
-      _FieldData(label: 'Debitore', value: s.debtorName),
-      _FieldData(label: 'Importo dovuto', value: '€ ${fmtCurrency.format(s.owedAmount).replaceAll('\u00A0', '')}'),
-      _FieldData(label: 'Stato', value: _readableState(s.state), chipColor: _stateColor(s.state)),
-      _FieldData(label: 'Scadenza corrente', value: s.nextDeadline != null ? _fmtDate(s.nextDeadline!) : '-'),
-      _FieldData(label: 'Negoziazione in corso', value: s.ongoingNegotiations ? 'Sì' : 'No'),
+    final base = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+      decoration: BoxDecoration(
+        color: base.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: const Offset(0,2))],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(s.debtorName, style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    _StateChip(state: s.state),
+                    const SizedBox(width: 16),
+                    Text('Importo: ', style: Theme.of(context).textTheme.labelLarge),
+                    Text('€ ${fmtCurrency.format(s.owedAmount)}', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: base.primary)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 1,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text('Scadenza:', style: Theme.of(context).textTheme.labelLarge),
+                Text(s.nextDeadline != null ? _fmtDate(s.nextDeadline!) : '-', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: base.primary)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+}
+
+class _SectionTitle extends StatelessWidget {
+  final String title;
+  const _SectionTitle(this.title);
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Row(
+        children: [
+          Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(width: 8),
+          Expanded(child: Divider(thickness: 1)),
+        ],
+      ),
+    );
+  }
+}
+
+class _FieldsGrid extends StatelessWidget {
+  final CaseDetailLoaded s;
+  final bool twoColumns;
+  const _FieldsGrid({required this.s, required this.twoColumns});
+  @override
+  Widget build(BuildContext context) {
+    final fmtCurrency = NumberFormat('#,##0.00', 'it_IT');
+    final fields = [
       _FieldData(label: 'Ultima modifica stato', value: _fmtDate(s.caseData.lastStateDate)),
       if (s.caseData.createdDate != null) _FieldData(label: 'Creata il', value: _fmtDate(s.caseData.createdDate!)),
       if (s.caseData.lastModifiedDate != null) _FieldData(label: 'Aggiornata il', value: _fmtDate(s.caseData.lastModifiedDate!)),
-      if (s.caseData.totalPaidAmount != null) _FieldData(label: 'Totale pagato', value: '€ ${fmtCurrency.format(s.caseData.totalPaidAmount!).replaceAll('\u00A0', '')}'),
-      if (s.caseData.remainingAmount != null) _FieldData(label: 'Residuo', value: '€ ${fmtCurrency.format(s.caseData.remainingAmount!).replaceAll('\u00A0', '')}'),
+      _FieldData(label: 'Negoziazione in corso', value: s.ongoingNegotiations ? 'Sì' : 'No'),
+      if (s.caseData.totalPaidAmount != null) _FieldData(label: 'Totale pagato', value: '€ ${fmtCurrency.format(s.caseData.totalPaidAmount!)}'),
+      if (s.caseData.remainingAmount != null) _FieldData(label: 'Residuo', value: '€ ${fmtCurrency.format(s.caseData.remainingAmount!)}'),
+      if (s.caseData.createdBy != null) _FieldData(label: 'Creato da', value: s.caseData.createdBy!),
+      if (s.caseData.lastModifiedBy != null) _FieldData(label: 'Ultima modifica da', value: s.caseData.lastModifiedBy!),
     ];
-
-    final fieldWidgets = fields.map((f) => _InfoTile(data: f)).toList();
-
-    Widget grid;
+    final children = fields.map((f) => _FieldTile(data: f)).toList();
     if (twoColumns) {
-      grid = Wrap(
-        spacing: 20,
-        runSpacing: 16,
-        children: fieldWidgets.map((w) => SizedBox(width: (MediaQuery.of(context).size.width - 60) / 2, child: w)).toList(),
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Wrap(
+          spacing: 32,
+          runSpacing: 20,
+          children: children.map((w) => SizedBox(width: 320, child: w)).toList(),
+        ),
       );
     } else {
-      grid = Column(children: [for (final w in fieldWidgets) Padding(padding: const EdgeInsets.only(bottom: 16), child: w)]);
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          children: [for (final w in children) Padding(padding: const EdgeInsets.only(bottom: 20), child: w)],
+        ),
+      );
     }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Dettaglio Pratica', style: Theme.of(context).textTheme.headlineSmall),
-        const SizedBox(height: 24),
-        grid,
-        const SizedBox(height: 28),
-        _NotesSection(notes: s.notes),
-        const SizedBox(height: 28),
-        _InstallmentsPreview(s: s),
-      ],
-    );
   }
-
   String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
-
-  String _readableState(CaseState cs) {
-    switch (cs) {
-      case CaseState.messaInMoraDaFare: return 'Messa in mora da fare';
-      case CaseState.messaInMoraInviata: return 'Messa in mora inviata';
-      case CaseState.contestazioneDaRiscontrare: return 'Contestazione da riscontrare';
-      case CaseState.depositoRicorso: return 'Deposito ricorso';
-      case CaseState.decretoIngiuntivoDaNotificare: return 'D.I. da notificare';
-      case CaseState.decretoIngiuntivoNotificato: return 'D.I. notificato';
-      case CaseState.precetto: return 'Precetto';
-      case CaseState.pignoramento: return 'Pignoramento';
-      case CaseState.completata: return 'Completata';
-    }
-  }
-
-  Color _stateColor(CaseState cs) {
-    switch (cs) {
-      case CaseState.completata: return Colors.green;
-      case CaseState.pignoramento: return Colors.deepPurple;
-      case CaseState.precetto: return Colors.indigo;
-      case CaseState.decretoIngiuntivoNotificato: return Colors.blueGrey;
-      case CaseState.decretoIngiuntivoDaNotificare: return Colors.blue;
-      case CaseState.depositoRicorso: return Colors.teal;
-      case CaseState.contestazioneDaRiscontrare: return Colors.orange;
-      case CaseState.messaInMoraInviata: return Colors.pink;
-      case CaseState.messaInMoraDaFare: return Colors.redAccent;
-    }
-  }
 }
 
 class _FieldData {
   final String label;
   final String value;
-  final Color? chipColor;
-  _FieldData({required this.label, required this.value, this.chipColor});
+  _FieldData({required this.label, required this.value});
 }
 
-class _InfoTile extends StatelessWidget {
+class _FieldTile extends StatelessWidget {
   final _FieldData data;
-  const _InfoTile({required this.data});
+  const _FieldTile({required this.data});
   @override
   Widget build(BuildContext context) {
     final base = Theme.of(context).colorScheme;
-    final bg = base.surfaceVariant.withOpacity(0.4);
-    final radius = BorderRadius.circular(12);
-    return Container(
-      decoration: BoxDecoration(color: bg, borderRadius: radius, border: Border.all(color: base.outlineVariant.withOpacity(0.4))),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(data.label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: base.primary)),
-        const SizedBox(height: 6),
-        if (data.chipColor != null)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(color: data.chipColor!.withOpacity(0.15), borderRadius: BorderRadius.circular(20), border: Border.all(color: data.chipColor!.withOpacity(0.4))),
-            child: Text(data.value, style: TextStyle(color: data.chipColor!, fontWeight: FontWeight.w600)),
-          )
-        else
-          Text(data.value, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500)),
-      ]),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(data.label, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: base.secondary)),
+        const SizedBox(height: 4),
+        Text(data.value, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500)),
+      ],
     );
   }
 }
@@ -206,20 +245,57 @@ class _NotesSection extends StatelessWidget {
   const _NotesSection({required this.notes});
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Note', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          if (notes == null || notes!.isEmpty)
-            const Text('— Nessuna nota —', style: TextStyle(color: Colors.black54))
-          else
-            Text(notes!, style: const TextStyle(height: 1.3)),
-        ]),
+    final base = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+      decoration: BoxDecoration(
+        color: base.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: base.outline.withOpacity(0.08)),
       ),
+      child: notes == null || notes!.isEmpty
+          ? const Text('— Nessuna nota —', style: TextStyle(color: Colors.black54))
+          : Text(notes!, style: const TextStyle(height: 1.3)),
+    );
+  }
+}
+
+class _StateChip extends StatelessWidget {
+  final CaseState state;
+  const _StateChip({required this.state});
+  @override
+  Widget build(BuildContext context) {
+    Color color = Colors.grey;
+    String label = 'Sconosciuto';
+    switch (state) {
+      case CaseState.messaInMoraDaFare:
+        color = Colors.grey; label = 'Messa in Mora da Fare'; break;
+      case CaseState.messaInMoraInviata:
+        color = Colors.red; label = 'Messa in Mora Inviata'; break;
+      case CaseState.contestazioneDaRiscontrare:
+        color = Colors.orange; label = 'Contestazione da Riscontrare'; break;
+      case CaseState.depositoRicorso:
+        color = Colors.amber; label = 'Deposito Ricorso'; break;
+      case CaseState.decretoIngiuntivoDaNotificare:
+        color = Colors.green; label = 'DI da Notificare'; break;
+      case CaseState.decretoIngiuntivoNotificato:
+        color = Colors.teal; label = 'DI Notificato'; break;
+      case CaseState.precetto:
+        color = Colors.blue; label = 'Precetto'; break;
+      case CaseState.pignoramento:
+        color = Colors.purple; label = 'Pignoramento'; break;
+      case CaseState.completata:
+        color = Colors.green; label = 'Completata'; break;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.18)),
+      ),
+      child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
     );
   }
 }
@@ -229,37 +305,33 @@ class _InstallmentsPreview extends StatelessWidget {
   const _InstallmentsPreview({required this.s});
   @override
   Widget build(BuildContext context) {
+    final base = Theme.of(context).colorScheme;
     if (s.caseData.hasInstallmentPlan != true) {
-      return Card(
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Rateizzazione', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            const Text('Nessun piano rate presente'),
-          ]),
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+        decoration: BoxDecoration(
+          color: base.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: base.outline.withOpacity(0.08)),
         ),
+        child: const Text('Nessun piano rate presente'),
       );
     }
-
     final list = s.localInstallments.values.toList()..sort((a,b)=>a.dueDate.compareTo(b.dueDate));
     final fmt = DateFormat('dd/MM/yyyy');
-
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(
-            children: [
-              Text('Rateizzazione', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(width: 12),
-              Text('(${list.length} rate)', style: const TextStyle(color: Colors.black54)),
-            ],
-          ),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+      decoration: BoxDecoration(
+        color: base.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: base.outline.withOpacity(0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Rate (${list.length})', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -287,11 +359,10 @@ class _InstallmentsPreview extends StatelessWidget {
               label: const Text('Modifica rate'),
             ),
           )
-        ]),
+        ],
       ),
     );
   }
-
   void _goToEdit(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -300,4 +371,3 @@ class _InstallmentsPreview extends StatelessWidget {
     );
   }
 }
-

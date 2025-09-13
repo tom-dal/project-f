@@ -222,7 +222,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         child: _buildTableHeader(),
                       ),
                       if(_isRefreshing)
-                        Positioned(top:0,left:0,right:0,child: LinearProgressIndicator(minHeight:3,color: const Color(0xFF2C3E8C), backgroundColor: Colors.transparent)),
+                        const Positioned(top:0,left:0,right:0,child: LinearProgressIndicator(minHeight:3,color: Color(0xFF2C3E8C), backgroundColor: Colors.transparent)),
                     ],
                   );
                 },
