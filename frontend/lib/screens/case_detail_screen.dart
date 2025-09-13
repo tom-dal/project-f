@@ -124,44 +124,59 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
           );
         }
         final s = state as CaseDetailLoaded;
-        return PopScope(
-          canPop: true,
-          onPopInvokedWithResult: (didPop, result) async {
-            if (_ignorePop || didPop) return;
-            if (s.dirty || s.installmentDirty.isNotEmpty || s.replacingPlan) {
-              final leave = await _confirmDiscard(context);
-              if (leave) Navigator.of(context).pop();
-            } else {
-              Navigator.of(context).pop();
-            }
-          },
-          child: Scaffold(
-            appBar: AppBar(
-              title: Text('Pratica ${s.caseData.id.substring(0, 6)}'),
-              actions: [
-                IconButton(
-                  tooltip: 'Elimina pratica',
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () => _confirmDeleteCase(context),
-                )
-              ],
-              bottom: s.saving ? const PreferredSize(
-                preferredSize: Size.fromHeight(3),
-                child: LinearProgressIndicator(minHeight: 3),
-              ) : null,
-            ),
-            floatingActionButton: _buildFab(context, s),
-            body: Form(
-              key: _formKey,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  const SizedBox(height: 12),
-                  _buildGeneralSection(context, s),
-                  const SizedBox(height: 24),
-                  _buildInstallmentsSection(context, s),
-                  const SizedBox(height: 120),
-                ],
+        final wide = MediaQuery.of(context).size.width > 780;
+        return Scaffold(
+          appBar: AppBar(
+            title: Text('Pratica ${s.caseData.id.substring(0, 6)}'),
+            actions: [
+              ElevatedButton.icon(
+                icon: const Icon(Icons.save),
+                label: const Text('Salva'),
+                onPressed: s.dirty && !s.saving ? () {
+                  if (_formKey.currentState?.validate()==true) {
+                    context.read<CaseDetailBloc>().add(SaveCaseEdits());
+                  }
+                } : null,
+                style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
+              ),
+            ],
+            bottom: s.saving ? const PreferredSize(
+              preferredSize: Size.fromHeight(3),
+              child: LinearProgressIndicator(minHeight: 3),
+            ) : null,
+          ),
+          floatingActionButton: FloatingActionButton.extended(
+            onPressed: s.dirty && !s.saving ? () {
+              if (_formKey.currentState?.validate()==true) {
+                context.read<CaseDetailBloc>().add(SaveCaseEdits());
+              }
+            } : null,
+            icon: const Icon(Icons.save),
+            label: const Text('Salva'),
+          ),
+          body: Form(
+            key: _formKey,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 24),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1100),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _EditHeaderSection(s: s, debtorCtrl: _debtorCtrl, amountCtrl: _amountCtrl, amountFocus: _amountFocus, bloc: context.read<CaseDetailBloc>()),
+                      const SizedBox(height: 32),
+                      _SectionTitle('Dati pratica'),
+                      const SizedBox(height: 8),
+                      _EditFieldsGrid(s: s, twoColumns: wide, notesCtrl: _notesCtrl, notesFocus: _notesFocus, bloc: context.read<CaseDetailBloc>(), formKey: _formKey),
+                      const SizedBox(height: 32),
+                      _SectionTitle('Rateizzazione'),
+                      const SizedBox(height: 8),
+                      _buildInstallmentsSection(context, s),
+                      const SizedBox(height: 32),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
@@ -336,134 +351,154 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
 
   Widget _buildInstallmentsSection(BuildContext context, CaseDetailLoaded s) {
     final bloc = context.read<CaseDetailBloc>();
-
-    // Nascondi la sezione rateizzazione se lo stato selezionato è completata
+    final base = Theme.of(context).colorScheme;
     if (s.state == CaseState.completata) {
-      return const SizedBox.shrink();
-    }
-
-    if (s.caseData.hasInstallmentPlan != true) {
-      return Card(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.grey.shade300)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Rateizzazione', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              const Text('Nessun piano presente'),
-              const SizedBox(height: 12),
-              _CreatePlanForm(onCreate: (n, first, amt, freq){
-                bloc.add(CreateInstallmentPlanEvent(numberOfInstallments: n, firstDueDate: first, installmentAmount: amt, frequencyDays: freq));
-              }),
-            ],
-          ),
+      // USER PREFERENCE: Mostra placeholder esplicativo quando la pratica è completata
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 32),
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: base.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade300),
         ),
-      );
-    }
-
-    final placeholders = s.localInstallments.keys.where((k)=>k.startsWith('tmp-')).toList();
-
-    final list = s.localInstallments.values.toList()
-      ..sort((a,b)=>a.dueDate.compareTo(b.dueDate));
-
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.grey.shade300)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            Row(
-              children: [
-                Text('Rateizzazione', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(width: 12),
-                if (s.replacingPlan) const Text('(Nuovo piano in preparazione)', style: TextStyle(color: Colors.orange))
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (list.isEmpty) const Text('Nessuna rata'),
-            if (list.isNotEmpty)
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  columns: const [
-                    DataColumn(label: Text('#')),
-                    DataColumn(label: Text('Importo')),
-                    DataColumn(label: Text('Scadenza')),
-                    DataColumn(label: Text('Stato')),
-                    DataColumn(label: Text('Azioni')),
-                  ],
-                  rows: list.map((inst) {
-                    final isPlaceholder = inst.id.startsWith('tmp-');
-                    final dirty = s.installmentDirty.contains(inst.id) || isPlaceholder;
-                    final rowColor = dirty ? Colors.amber.withValues(alpha: 0.12) : null;
-                    return DataRow(
-                      color: rowColor != null ? WidgetStatePropertyAll(rowColor) : null,
-                      cells: [
-                        DataCell(Row(children:[Text(inst.installmentNumber.toString()), if(dirty) const SizedBox(width:4), if(dirty) const Text('*', style: TextStyle(color: Colors.orange,fontWeight: FontWeight.bold))])),
-                        DataCell(_AmountCell(
-                          amount: inst.amount,
-                          enabled: !isPlaceholder || true,
-                          formatter: _itFormatter,
-                          onChanged: (val){
-                            final parsed = _parseAmount(val);
-                            if (parsed!=null) bloc.add(UpdateInstallmentLocal(installmentId: inst.id, amount: parsed));
-                          },
-                        )),
-                        DataCell(_DueDateCell(
-                          date: inst.dueDate,
-                          enabled: !isPlaceholder || true,
-                          onPick: (d){ bloc.add(UpdateInstallmentLocal(installmentId: inst.id, dueDate: d)); },
-                        )),
-                        DataCell(Text(inst.paid==true? 'Pagata' : 'Da pagare', style: TextStyle(color: inst.paid==true? Colors.green: Colors.orange))),
-                        DataCell(Row(
-                          children: [
-                            if (!isPlaceholder)
-                              IconButton(
-                                tooltip: 'Salva rata',
-                                icon: const Icon(Icons.save, size: 18),
-                                onPressed: dirty && !s.replacingPlan && !s.saving ? ()=> bloc.add(SaveSingleInstallment(inst.id)) : null,
-                              ),
-                            if (isPlaceholder)
-                              IconButton(
-                                tooltip: 'Rimuovi',
-                                icon: const Icon(Icons.close, size: 18, color: Colors.red),
-                                onPressed: ()=> bloc.add(RemoveNewInstallmentPlaceholder(inst.id)),
-                              ),
-                          ],
-                        )),
-                      ],
-                    );
-                  }).toList(),
-                ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                'Gestione rate non disponibile per pratiche completate.',
+                style: Theme.of(context).textTheme.titleMedium,
               ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 8,
-              children: [
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.add),
-                  label: const Text('Aggiungi rata (placeholder)'),
-                  onPressed: s.saving ? null : ()=> bloc.add(AddNewInstallmentPlaceholder()),
-                ),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.swap_horiz),
-                  label: const Text('Sostituisci piano'),
-                  onPressed: (!s.replacingPlan || placeholders.isEmpty || s.saving)? null : ()=> bloc.add(ApplyNewInstallmentsReplacePlan()),
-                ),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.delete_outline),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade50, foregroundColor: Colors.red),
-                  label: const Text('Elimina piano'),
-                  onPressed: s.saving ? null : ()=> _confirmDeletePlan(context),
-                ),
-              ],
             ),
           ],
         ),
+      );
+    }
+    if (s.caseData.hasInstallmentPlan != true) {
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 32),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: base.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Nessun piano presente', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            const Text('Crea un piano di rateizzazione. Le singole rate potranno essere modificate successivamente.'),
+            const SizedBox(height: 12),
+            _CreatePlanForm(onCreate: (n, first, amt, freq){
+              bloc.add(CreateInstallmentPlanEvent(numberOfInstallments: n, firstDueDate: first, installmentAmount: amt, frequencyDays: freq));
+            }),
+          ],
+        ),
+      );
+    }
+    final placeholders = s.localInstallments.keys.where((k)=>k.startsWith('tmp-')).toList();
+    final list = s.localInstallments.values.toList()..sort((a,b)=>a.dueDate.compareTo(b.dueDate));
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 32),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: base.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('Rateizzazione', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(width: 12),
+              if (s.replacingPlan) const Text('(Nuovo piano in preparazione)', style: TextStyle(color: Colors.orange))
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (list.isEmpty) const Text('Nessuna rata'),
+          if (list.isNotEmpty)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('#')),
+                  DataColumn(label: Text('Importo')),
+                  DataColumn(label: Text('Scadenza')),
+                  DataColumn(label: Text('Stato')),
+                  DataColumn(label: Text('Azioni')),
+                ],
+                rows: list.map((inst) {
+                  final isPlaceholder = inst.id.startsWith('tmp-');
+                  final dirty = s.installmentDirty.contains(inst.id) || isPlaceholder;
+                  final rowColor = dirty ? Colors.amber.withValues(alpha: 0.12) : null;
+                  return DataRow(
+                    color: rowColor != null ? WidgetStatePropertyAll(rowColor) : null,
+                    cells: [
+                      DataCell(Row(children:[Text(inst.installmentNumber.toString()), if(dirty) const SizedBox(width:4), if(dirty) const Text('*', style: TextStyle(color: Colors.orange,fontWeight: FontWeight.bold))])),
+                      DataCell(_AmountCell(
+                        amount: inst.amount,
+                        enabled: !isPlaceholder || true,
+                        formatter: _itFormatter,
+                        onChanged: (val){
+                          final parsed = _parseAmount(val);
+                          if (parsed!=null) bloc.add(UpdateInstallmentLocal(installmentId: inst.id, amount: parsed));
+                        },
+                      )),
+                      DataCell(_DueDateCell(
+                        date: inst.dueDate,
+                        enabled: !isPlaceholder || true,
+                        onPick: (d){ bloc.add(UpdateInstallmentLocal(installmentId: inst.id, dueDate: d)); },
+                      )),
+                      DataCell(Text(inst.paid==true? 'Pagata' : 'Da pagare', style: TextStyle(color: inst.paid==true? Colors.green: Colors.orange))),
+                      DataCell(Row(
+                        children: [
+                          if (!isPlaceholder)
+                            IconButton(
+                              tooltip: 'Salva rata',
+                              icon: const Icon(Icons.save, size: 18),
+                              onPressed: dirty && !s.replacingPlan && !s.saving ? ()=> bloc.add(SaveSingleInstallment(inst.id)) : null,
+                            ),
+                          if (isPlaceholder)
+                            IconButton(
+                              tooltip: 'Rimuovi',
+                              icon: const Icon(Icons.close, size: 18, color: Colors.red),
+                              onPressed: ()=> bloc.add(RemoveNewInstallmentPlaceholder(inst.id)),
+                            ),
+                        ],
+                      )),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              ElevatedButton.icon(
+                icon: const Icon(Icons.add),
+                label: const Text('Aggiungi rata (placeholder)'),
+                onPressed: s.saving ? null : ()=> bloc.add(AddNewInstallmentPlaceholder()),
+              ),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.swap_horiz),
+                label: const Text('Sostituisci piano'),
+                onPressed: (!s.replacingPlan || placeholders.isEmpty || s.saving)? null : ()=> bloc.add(ApplyNewInstallmentsReplacePlan()),
+              ),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.delete_outline),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade50, foregroundColor: Colors.red),
+                label: const Text('Elimina piano'),
+                onPressed: s.saving ? null : ()=> _confirmDeletePlan(context),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -775,6 +810,226 @@ class _CreatePlanFormState extends State<_CreatePlanForm> {
           )
         ],
       ),
+    );
+  }
+}
+
+// --- Nuovi widget per layout Material ---
+class _EditHeaderSection extends StatelessWidget {
+  final CaseDetailLoaded s;
+  final TextEditingController debtorCtrl;
+  final TextEditingController amountCtrl;
+  final FocusNode amountFocus;
+  final CaseDetailBloc bloc;
+  const _EditHeaderSection({required this.s, required this.debtorCtrl, required this.amountCtrl, required this.amountFocus, required this.bloc});
+  @override
+  Widget build(BuildContext context) {
+    final base = Theme.of(context).colorScheme;
+    // USER PREFERENCE: Assicura che il campo importo sia valorizzato con il valore attuale
+    if (amountCtrl.text.isEmpty || amountCtrl.text == '0' || amountCtrl.text == '0,00') {
+      amountCtrl.text = s.owedAmount != null ? NumberFormat('#,##0.00', 'it_IT').format(s.owedAmount).replaceAll('\u00A0', '') : '';
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+      decoration: BoxDecoration(
+        color: base.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: const Offset(0,2))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextFormField(
+            controller: debtorCtrl,
+            decoration: const InputDecoration(labelText: 'Debitore'),
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+            onChanged: (v) => bloc.add(EditDebtorName(v.trim())),
+            validator: (v) => (v==null||v.trim().length<2)?'Nome non valido':null,
+          ),
+          const SizedBox(height: 20),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<CaseState>(
+                  value: s.state,
+                  decoration: const InputDecoration(labelText: 'Stato'),
+                  items: CaseState.values.map((cs) => DropdownMenuItem(
+                    value: cs,
+                    child: Text(_readableState(cs)),
+                  )).toList(),
+                  onChanged: (val) { if (val != null) bloc.add(EditState(val)); },
+                ),
+              ),
+              const SizedBox(width: 32),
+              Expanded(
+                child: TextFormField(
+                  controller: amountCtrl,
+                  focusNode: amountFocus,
+                  decoration: const InputDecoration(labelText: 'Importo dovuto (€)'),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (v){
+                    final parsed = double.tryParse(v.replaceAll(',', '.'));
+                    if (parsed!=null) bloc.add(EditOwedAmount(parsed));
+                  },
+                  validator: (v){
+                    final parsed = double.tryParse((v??'').replaceAll(',', '.'));
+                    if (parsed==null || parsed<=0) return 'Importo non valido';
+                    final decimals = v?.split(RegExp(r'[.,]')).length == 2 ? v?.split(RegExp(r'[.,]'))[1].length : 0;
+                    if (decimals != null && decimals > 2) return 'Max 2 decimali';
+                    return null;
+                  },
+                ),
+              ),
+              const SizedBox(width: 32),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('Scadenza:', style: Theme.of(context).textTheme.labelLarge),
+                    Text(s.nextDeadline != null ? _fmtDate(s.nextDeadline!) : '-', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: base.primary)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+  String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+  String _readableState(CaseState cs) {
+    switch (cs) {
+      case CaseState.messaInMoraDaFare: return 'Messa in mora da fare';
+      case CaseState.messaInMoraInviata: return 'Messa in mora inviata';
+      case CaseState.contestazioneDaRiscontrare: return 'Contestazione da riscontrare';
+      case CaseState.depositoRicorso: return 'Deposito ricorso';
+      case CaseState.decretoIngiuntivoDaNotificare: return 'D.I. da notificare';
+      case CaseState.decretoIngiuntivoNotificato: return 'D.I. notificato';
+      case CaseState.precetto: return 'Precetto';
+      case CaseState.pignoramento: return 'Pignoramento';
+      case CaseState.completata: return 'Completata';
+    }
+  }
+}
+
+class _StateChip extends StatelessWidget {
+  final CaseState state;
+  const _StateChip({required this.state});
+  @override
+  Widget build(BuildContext context) {
+    Color color = Colors.grey;
+    String label = 'Sconosciuto';
+    switch (state) {
+      case CaseState.messaInMoraDaFare:
+        color = Colors.redAccent; label = 'Messa in Mora da Fare'; break;
+      case CaseState.messaInMoraInviata:
+        color = Colors.pink; label = 'Messa in Mora Inviata'; break;
+      case CaseState.contestazioneDaRiscontrare:
+        color = Colors.orange; label = 'Contestazione da Riscontrare'; break;
+      case CaseState.depositoRicorso:
+        color = Colors.teal; label = 'Deposito Ricorso'; break;
+      case CaseState.decretoIngiuntivoDaNotificare:
+        color = Colors.blue; label = 'DI da Notificare'; break;
+      case CaseState.decretoIngiuntivoNotificato:
+        color = Colors.blueGrey; label = 'DI Notificato'; break;
+      case CaseState.precetto:
+        color = Colors.indigo; label = 'Precetto'; break;
+      case CaseState.pignoramento:
+        color = Colors.deepPurple; label = 'Pignoramento'; break;
+      case CaseState.completata:
+        color = Colors.green; label = 'Completata'; break;
+    }
+    return Container(
+      margin: const EdgeInsets.only(top: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.18)),
+      ),
+      child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  final String title;
+  const _SectionTitle(this.title);
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Row(
+        children: [
+          Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(width: 8),
+          Expanded(child: Divider(thickness: 1)),
+        ],
+      ),
+    );
+  }
+}
+
+class _EditFieldsGrid extends StatelessWidget {
+  final CaseDetailLoaded s;
+  final bool twoColumns;
+  final TextEditingController notesCtrl;
+  final FocusNode notesFocus;
+  final CaseDetailBloc bloc;
+  final GlobalKey<FormState> formKey;
+  const _EditFieldsGrid({required this.s, required this.twoColumns, required this.notesCtrl, required this.notesFocus, required this.bloc, required this.formKey});
+  @override
+  Widget build(BuildContext context) {
+    final fields = [
+      _EditFieldData(label: 'Ultima modifica stato', value: _fmtDate(s.caseData.lastStateDate)),
+      if (s.caseData.createdDate != null) _EditFieldData(label: 'Creata il', value: _fmtDate(s.caseData.createdDate!)),
+      if (s.caseData.lastModifiedDate != null) _EditFieldData(label: 'Aggiornata il', value: _fmtDate(s.caseData.lastModifiedDate!)),
+      _EditFieldData(label: 'Negoziazione in corso', value: s.ongoingNegotiations ? 'Sì' : 'No'),
+      if (s.caseData.totalPaidAmount != null) _EditFieldData(label: 'Totale pagato', value: '€ ${s.caseData.totalPaidAmount!.toStringAsFixed(2)}'),
+      if (s.caseData.remainingAmount != null) _EditFieldData(label: 'Residuo', value: '€ ${s.caseData.remainingAmount!.toStringAsFixed(2)}'),
+      if (s.caseData.createdBy != null) _EditFieldData(label: 'Creato da', value: s.caseData.createdBy!),
+      if (s.caseData.lastModifiedBy != null) _EditFieldData(label: 'Ultima modifica da', value: s.caseData.lastModifiedBy!),
+    ];
+    final children = fields.map((f) => _EditFieldTile(data: f)).toList();
+    if (twoColumns) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Wrap(
+          spacing: 32,
+          runSpacing: 20,
+          children: children.map((w) => SizedBox(width: 320, child: w)).toList(),
+        ),
+      );
+    } else {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          children: [for (final w in children) Padding(padding: const EdgeInsets.only(bottom: 20), child: w)],
+        ),
+      );
+    }
+  }
+  String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+}
+class _EditFieldData {
+  final String label;
+  final String value;
+  _EditFieldData({required this.label, required this.value});
+}
+class _EditFieldTile extends StatelessWidget {
+  final _EditFieldData data;
+  const _EditFieldTile({required this.data});
+  @override
+  Widget build(BuildContext context) {
+    final base = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(data.label, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: base.secondary)),
+        const SizedBox(height: 4),
+        Text(data.value, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500)),
+      ],
     );
   }
 }
