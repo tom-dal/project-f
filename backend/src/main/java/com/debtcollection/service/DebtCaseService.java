@@ -84,7 +84,7 @@ public class DebtCaseService {
         DebtCase debtCase = debtCaseRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("DebtCase not found with id: " + id));
         
-        // CUSTOM IMPLEMENTATION: Update expandido con tutti i campi modificabili
+        // CUSTOM IMPLEMENTATION: Update expanded con tutti i campi modificabili
         // Aggiorna debtorName se fornito
         if (debtorName != null) {
             debtCase.setDebtorName(debtorName);
@@ -245,7 +245,6 @@ public class DebtCaseService {
 
     /**
      * Create an installment plan for a debt case
-     * USER PREFERENCE: Installments are now embedded in DebtCase
      */
     @Transactional
     public InstallmentPlanResponse createInstallmentPlan(String debtCaseId, InstallmentPlanRequest request) {
@@ -654,4 +653,93 @@ public class DebtCaseService {
     }
 
     private boolean allowPaidPastDates(boolean value) { return value; }
+
+    // --- Payments Management (reintroduced) ---
+    @Transactional(readOnly = true)
+    public List<PaymentDto> listPayments(String debtCaseId) {
+        DebtCase debtCase = debtCaseRepository.findById(debtCaseId)
+                .orElseThrow(() -> new IllegalArgumentException("DebtCase not found with id: " + debtCaseId));
+        return debtCase.getPayments().stream()
+                .sorted(Comparator.comparing(Payment::getPaymentDate).thenComparing(Payment::getCreatedDate))
+                .map(p -> {
+                    PaymentDto dto = paymentMapper.toDto(p);
+                    dto.setDebtCaseId(debtCaseId);
+                    return dto;
+                })
+                .toList();
+    }
+
+    @Transactional
+    public PaymentDto updatePayment(String debtCaseId, String paymentId, BigDecimal amount, LocalDate paymentDate) {
+        DebtCase debtCase = debtCaseRepository.findById(debtCaseId)
+                .orElseThrow(() -> new IllegalArgumentException("DebtCase not found with id: " + debtCaseId));
+        Payment payment = debtCase.getPayments().stream()
+                .filter(p -> paymentId.equals(p.getPaymentId()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Payment not found with id: " + paymentId));
+        if (amount != null) {
+            if (amount.compareTo(BigDecimal.ZERO) <= 0) throw new IllegalArgumentException("Payment amount must be > 0");
+            payment.setAmount(amount.doubleValue());
+        }
+        if (paymentDate != null) {
+            payment.setPaymentDate(paymentDate);
+        }
+        payment.setLastModifiedDate(LocalDateTime.now());
+        payment.setLastModifiedBy("system"); // CUSTOM IMPLEMENTATION: placeholder user
+
+        // Se pagamento legato a rata aggiorna i dati rata
+        if (payment.getInstallmentId() != null) {
+            debtCase.getInstallments().stream()
+                    .filter(i -> payment.getInstallmentId().equals(i.getInstallmentId()))
+                    .findFirst()
+                    .ifPresent(inst -> {
+                        if (amount != null) inst.setPaidAmount(amount);
+                        if (paymentDate != null) inst.setPaidDate(paymentDate.atStartOfDay());
+                        inst.setLastModifiedDate(LocalDateTime.now());
+                    });
+        }
+        // Ricalcolo flag paid (e completamento se supera importo)
+        Double totalPaid = calculateTotalPaidAmount(debtCase);
+        boolean fullyPaid = totalPaid.compareTo(debtCase.getOwedAmount()) >= 0;
+        debtCase.setPaid(fullyPaid);
+        if (fullyPaid && debtCase.getCurrentState() != CaseState.COMPLETATA) {
+            debtCase.setNotes("Case automatically marked as COMPLETATA after payment update");
+            debtCase.setCurrentState(CaseState.COMPLETATA);
+            debtCase.setCurrentStateDate(LocalDateTime.now());
+            debtCase.setNextDeadlineDate(null);
+        }
+        debtCaseRepository.save(debtCase);
+        PaymentDto dto = paymentMapper.toDto(payment);
+        dto.setDebtCaseId(debtCaseId);
+        return dto;
+    }
+
+    @Transactional
+    public void deletePayment(String debtCaseId, String paymentId) {
+        DebtCase debtCase = debtCaseRepository.findById(debtCaseId)
+                .orElseThrow(() -> new IllegalArgumentException("DebtCase not found with id: " + debtCaseId));
+        Payment target = null;
+        for (Payment p : debtCase.getPayments()) {
+            if (paymentId.equals(p.getPaymentId())) { target = p; break; }
+        }
+        if (target == null) throw new IllegalArgumentException("Payment not found with id: " + paymentId);
+        String targetInstallmentId = target.getInstallmentId(); // make effectively final for lambda
+        debtCase.getPayments().remove(target);
+        if (targetInstallmentId != null) {
+            final String instId = targetInstallmentId;
+            debtCase.getInstallments().stream()
+                    .filter(i -> instId.equals(i.getInstallmentId()))
+                    .findFirst()
+                    .ifPresent(inst -> {
+                        inst.setPaid(false);
+                        inst.setPaidAmount(null);
+                        inst.setPaidDate(null);
+                        inst.setLastModifiedDate(LocalDateTime.now());
+                    });
+        }
+        Double totalPaid = calculateTotalPaidAmount(debtCase);
+        debtCase.setPaid(totalPaid.compareTo(debtCase.getOwedAmount()) >= 0);
+        debtCaseRepository.save(debtCase);
+    }
 }
+

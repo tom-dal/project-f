@@ -17,6 +17,7 @@ public class PaymentDto {
     private LocalDate paymentDate;
 
     private String debtCaseId; // USER PREFERENCE: Changed from Long to String for MongoDB ObjectId
+    private String installmentId; // CUSTOM IMPLEMENTATION: Reference to related installment (if any)
     private LocalDateTime createdDate;
     private LocalDateTime lastModifiedDate;
 }

@@ -26,6 +26,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -280,6 +281,43 @@ public class DebtCaseController {
         }
     }
 
+    @GetMapping("/{id}/payments")
+    public ResponseEntity<?> listPayments(@PathVariable String id) {
+        try {
+            List<PaymentDto> list = debtCaseService.listPayments(id);
+            return ResponseEntity.ok(list);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage(), "error", "IllegalArgumentException"));
+        }
+    }
+
+    @PutMapping("/{id}/payments/{paymentId}")
+    public ResponseEntity<?> updatePayment(
+            @PathVariable String id,
+            @PathVariable String paymentId,
+            @RequestBody UpdatePaymentRequest request
+    ) {
+        try {
+            PaymentDto dto = debtCaseService.updatePayment(id, paymentId, request.amount(), request.paymentDate());
+            return ResponseEntity.ok(dto);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage(), "error", "IllegalArgumentException"));
+        }
+    }
+
+    @DeleteMapping("/{id}/payments/{paymentId}")
+    public ResponseEntity<?> deletePayment(
+            @PathVariable String id,
+            @PathVariable String paymentId
+    ) {
+        try {
+            debtCaseService.deletePayment(id, paymentId);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage(), "error", "IllegalArgumentException"));
+        }
+    }
+
     public record CreateDebtCaseRequest(
         @NotBlank(message = "Debtor name is required")
         @Size(min = 2, max = 255, message = "Debtor name must be between 2 and 255 characters")
@@ -332,5 +370,10 @@ public class DebtCaseController {
     public record ReplaceInstallmentItem(
             @NotNull(message = "amount required") @DecimalMin(value = "0.01", message = "Amount must be > 0") BigDecimal amount,
             @NotNull(message = "dueDate required") LocalDateTime dueDate
+    ) {}
+
+    public record UpdatePaymentRequest(
+            @DecimalMin(value = "0.01", message = "Amount must be > 0") BigDecimal amount,
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate paymentDate
     ) {}
 }

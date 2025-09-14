@@ -195,10 +195,6 @@ class ApiService {
     developer.log('Token removed due to 401 error from: $requestPath');
   }
 
-  void _handleUnauthorized() async {
-    // Metodo legacy mantenuto per compatibilità, ma migliorato
-    await _handleUnauthorizedSafely('unknown');
-  }
 
   void _handleCredentialsExpired() async {
     await deleteToken();
@@ -634,9 +630,7 @@ class ApiService {
 
       // Log all filters sent to backend
       // USER PREFERENCE: Log filters sent to backend on console
-      print('[API] Filtri inviati al backend: '
-          + baseParams.toString()
-          + (states != null ? ', states: ' + states.map(_caseStateToJson).toList().toString() : ''));
+      print('[API] Filtri inviati al backend: $baseParams${states != null ? ', states: ${states.map(_caseStateToJson).toList()}' : ''}');
 
       final response = await _dio.get(
         url,
@@ -1283,6 +1277,86 @@ class ApiService {
     } on DioException catch(e){
       if (e.response?.data is Map) throw e.response?.data['message'] ?? 'Errore';
       throw e.message ?? 'Errore';
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> listPayments(String caseId) async {
+    try {
+      _log('📋 Listing payments for case $caseId');
+      final response = await _dio.get(
+        '/cases/$caseId/payments',
+        options: Options(validateStatus: (s)=>true),
+      );
+      if (response.statusCode == 200) {
+        final data = response.data;
+        if (data is List) {
+          return data.cast<Map<String,dynamic>>();
+        }
+        return <Map<String,dynamic>>[];
+      }
+      if (response.statusCode == 401) {
+        await _handleUnauthorizedSafely('/cases/$caseId/payments');
+        throw 'Sessione scaduta. Effettua nuovamente il login.';
+      }
+      if (response.data is Map) throw response.data['message'] ?? 'Errore caricamento pagamenti';
+      throw 'Errore caricamento pagamenti';
+    } on DioException catch(e){
+      if (e.response?.statusCode == 401) {
+        await _handleUnauthorizedSafely('/cases/$caseId/payments');
+        throw 'Sessione scaduta. Effettua nuovamente il login.';
+      }
+      throw e.message ?? 'Errore rete pagamenti';
+    }
+  }
+
+  Future<Map<String,dynamic>> updatePayment({required String caseId, required String paymentId, double? amount, DateTime? paymentDate}) async {
+    if (amount == null && paymentDate == null) {
+      throw 'Nessun campo da aggiornare';
+    }
+    try {
+      final body = <String,dynamic>{};
+      if (amount != null) body['amount'] = amount;
+      if (paymentDate != null) body['paymentDate'] = paymentDate.toIso8601String().split('T').first; // date only
+      final response = await _dio.put(
+        '/cases/$caseId/payments/$paymentId',
+        data: body,
+        options: Options(validateStatus: (s)=>true),
+      );
+      if (response.statusCode == 200) return response.data as Map<String,dynamic>;
+      if (response.statusCode == 401) {
+        await _handleUnauthorizedSafely('/cases/$caseId/payments/$paymentId');
+        throw 'Sessione scaduta. Effettua nuovamente il login.';
+      }
+      if (response.data is Map) throw response.data['message'] ?? 'Errore aggiornamento pagamento';
+      throw 'Errore aggiornamento pagamento';
+    } on DioException catch(e){
+      if (e.response?.statusCode == 401) {
+        await _handleUnauthorizedSafely('/cases/$caseId/payments/$paymentId');
+        throw 'Sessione scaduta. Effettua nuovamente il login.';
+      }
+      throw e.message ?? 'Errore rete aggiornamento pagamento';
+    }
+  }
+
+  Future<void> deletePayment({required String caseId, required String paymentId}) async {
+    try {
+      final response = await _dio.delete(
+        '/cases/$caseId/payments/$paymentId',
+        options: Options(validateStatus: (s)=>true),
+      );
+      if (response.statusCode == 204) return;
+      if (response.statusCode == 401) {
+        await _handleUnauthorizedSafely('/cases/$caseId/payments/$paymentId');
+        throw 'Sessione scaduta. Effettua nuovamente il login.';
+      }
+      if (response.data is Map) throw response.data['message'] ?? 'Errore eliminazione pagamento';
+      throw 'Errore eliminazione pagamento';
+    } on DioException catch(e){
+      if (e.response?.statusCode == 401) {
+        await _handleUnauthorizedSafely('/cases/$caseId/payments/$paymentId');
+        throw 'Sessione scaduta. Effettua nuovamente il login.';
+      }
+      throw e.message ?? 'Errore rete eliminazione pagamento';
     }
   }
 }

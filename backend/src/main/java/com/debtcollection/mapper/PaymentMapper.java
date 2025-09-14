@@ -17,10 +17,7 @@ public class PaymentMapper {
         dto.setPaymentDate(payment.getPaymentDate());
         dto.setCreatedDate(payment.getCreatedDate());
         dto.setLastModifiedDate(payment.getLastModifiedDate());
-
-        // USER PREFERENCE: Payment is now embedded - no debtCase reference needed
-        // The debtCaseId will be set by the service layer when calling this mapper
-
+        dto.setInstallmentId(payment.getInstallmentId()); // CUSTOM IMPLEMENTATION: expose related installment
         return dto;
     }
 }
