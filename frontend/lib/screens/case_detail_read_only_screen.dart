@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -6,7 +7,8 @@ import '../models/debt_case.dart';
 import '../models/case_state.dart';
 import '../blocs/case_detail/case_detail_bloc.dart';
 import '../services/api_service.dart';
-import 'case_detail_screen.dart';
+import '../utils/amount_validator.dart';
+import 'case_detail_edit_screen.dart';
 
 class CaseDetailReadOnlyScreen extends StatelessWidget {
   final String caseId;
@@ -23,12 +25,35 @@ class CaseDetailReadOnlyScreen extends StatelessWidget {
   }
 }
 
-class _CaseDetailReadOnlyView extends StatelessWidget {
+class _CaseDetailReadOnlyView extends StatefulWidget {
   const _CaseDetailReadOnlyView();
+  @override
+  State<_CaseDetailReadOnlyView> createState() => _CaseDetailReadOnlyViewState();
+}
+
+class _CaseDetailReadOnlyViewState extends State<_CaseDetailReadOnlyView> {
+  String? _lastSuccess;
+  String? _lastError;
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<CaseDetailBloc, CaseDetailState>(
+    return BlocConsumer<CaseDetailBloc, CaseDetailState>(
+      listener: (context, state){
+        if (state is CaseDetailLoaded) {
+          if (state.successMessage != null && state.successMessage != _lastSuccess) {
+            _lastSuccess = state.successMessage;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(state.successMessage!), behavior: SnackBarBehavior.floating),
+            );
+          }
+          if (state.error != null && state.error != _lastError) {
+            _lastError = state.error;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(state.error!), backgroundColor: Colors.redAccent),
+            );
+          }
+        }
+      },
       builder: (context, state) {
         if (state is CaseDetailLoading) {
           return Scaffold(
@@ -68,7 +93,7 @@ class _CaseDetailReadOnlyView extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _HeaderSection(s: s),
+                        _HeaderSection(s: s, onRegisterPayment: _openRegisterPaymentDialog),
                         const SizedBox(height: 32),
                         _SectionTitle('Dati pratica'),
                         const SizedBox(height: 8),
@@ -102,19 +127,136 @@ class _CaseDetailReadOnlyView extends StatelessWidget {
   void _openEdit(BuildContext context, CaseDetailLoaded s) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => CaseDetailScreen(caseId: s.caseData.id, initialCase: s.caseData),
+        builder: (_) => CaseDetailEditScreen(caseId: s.caseData.id, initialCase: s.caseData),
       ),
+    );
+  }
+
+  void _openRegisterPaymentDialog(CaseDetailLoaded s) {
+    final amountCtrl = TextEditingController();
+    DateTime selectedDate = DateTime.now();
+    bool useResiduo = false;
+    final formKey = GlobalKey<FormState>();
+    final residuo = s.caseData.remainingAmount ?? (s.owedAmount - (s.caseData.totalPaidAmount ?? 0));
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            void applyResiduo(bool v){
+              setState(() {
+                useResiduo = v;
+                if (useResiduo) {
+                  amountCtrl.text = NumberFormat('#,##0.00', 'it_IT').format(residuo).replaceAll('\u00A0','');
+                } else {
+                  amountCtrl.clear();
+                }
+              });
+            }
+            return AlertDialog(
+              title: const Text('Registra pagamento'),
+              content: Form(
+                key: formKey,
+                child: SizedBox(
+                  width: 360,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: amountCtrl,
+                        decoration: const InputDecoration(labelText: 'Importo (€)'),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                          FilteringTextInputFormatter.deny(RegExp(r'([.,].*[.,])')),
+                          TextInputFormatter.withFunction((oldValue,newValue){
+                            final parts = newValue.text.split(RegExp(r'[.,]'));
+                            if (parts.length==2 && parts[1].length>2) return oldValue; return newValue;
+                          })
+                        ],
+                        validator: (v){
+                          if (useResiduo) return null;
+                          final res = normalizeFlexibleItalianAmount(v??'');
+                          if (res.error!=null) return res.error;
+                          return null;
+                        },
+                        enabled: !useResiduo,
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Switch(value: useResiduo && residuo>0, onChanged: residuo>0 ? (v)=>applyResiduo(v) : null),
+                          const SizedBox(width: 4),
+                          Expanded(child: Text('Usa importo residuo (${residuo>0? '€ '+residuo.toStringAsFixed(2):'0'})')),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      InkWell(
+                        onTap: () async {
+                          final now = DateTime.now();
+                          final picked = await showDatePicker(
+                            context: ctx,
+                            firstDate: DateTime(now.year-1),
+                            lastDate: DateTime(now.year+5),
+                            initialDate: selectedDate,
+                            helpText: 'Data pagamento',
+                          );
+                          if (picked!=null) setState(()=> selectedDate = DateTime(picked.year, picked.month, picked.day));
+                        },
+                        child: InputDecorator(
+                          decoration: const InputDecoration(labelText: 'Data pagamento'),
+                          child: Row(
+                            children: [
+                              Expanded(child: Text('${selectedDate.day.toString().padLeft(2,'0')}/${selectedDate.month.toString().padLeft(2,'0')}/${selectedDate.year}')),
+                              const Icon(Icons.date_range, size: 18)
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: ()=>Navigator.pop(ctx), child: const Text('Annulla')),
+                ElevatedButton(
+                  onPressed: (){
+                    if (formKey.currentState?.validate()==true) {
+                      double amount;
+                      if (useResiduo) {
+                        amount = residuo;
+                      } else {
+                        final res = normalizeFlexibleItalianAmount(amountCtrl.text);
+                        if (!res.isValid) return; else amount = res.value!;
+                      }
+                      context.read<CaseDetailBloc>().add(RegisterCasePayment(amount: amount, paymentDate: selectedDate));
+                      Navigator.pop(ctx);
+                    }
+                  },
+                  child: const Text('Conferma'),
+                )
+              ],
+            );
+          },
+        );
+      }
     );
   }
 }
 
 class _HeaderSection extends StatelessWidget {
   final CaseDetailLoaded s;
-  const _HeaderSection({required this.s});
+  final void Function(CaseDetailLoaded) onRegisterPayment;
+  const _HeaderSection({required this.s, required this.onRegisterPayment});
   @override
   Widget build(BuildContext context) {
     final fmtCurrency = NumberFormat('#,##0.00', 'it_IT');
     final base = Theme.of(context).colorScheme;
+    final residuo = s.caseData.remainingAmount ?? (s.owedAmount - (s.caseData.totalPaidAmount ?? 0));
+    final showRegisterPayment = (s.caseData.hasInstallmentPlan != true) && residuo > 0.0;
+    final hasPayments = (s.caseData.totalPaidAmount ?? 0) > 0.0;
+    final isCompletata = s.state == CaseState.completata;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
       decoration: BoxDecoration(
@@ -135,21 +277,48 @@ class _HeaderSection extends StatelessWidget {
                 Row(
                   children: [
                     _StateChip(state: s.state),
-                    const SizedBox(width: 16),
-                    Text('Importo: ', style: Theme.of(context).textTheme.labelLarge),
+                    if (s.ongoingNegotiations) ...[
+                      const SizedBox(width: 12),
+                      _NegotiationChip(),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Text('Importo:', style: Theme.of(context).textTheme.labelLarge),
+                    const SizedBox(width: 4),
                     Text('€ ${fmtCurrency.format(s.owedAmount)}', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: base.primary)),
                   ],
                 ),
-              ],
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text('Scadenza:', style: Theme.of(context).textTheme.labelLarge),
-                Text(s.nextDeadline != null ? _fmtDate(s.nextDeadline!) : '-', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: base.primary)),
+                if (!isCompletata && hasPayments) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Text('Residuo:', style: Theme.of(context).textTheme.labelLarge),
+                      const SizedBox(width: 4),
+                      Text('€ ${fmtCurrency.format(residuo)}', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: base.primary)),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Text('Scadenza:', style: Theme.of(context).textTheme.labelLarge),
+                    const SizedBox(width: 4),
+                    Text(s.nextDeadline != null ? _fmtDate(s.nextDeadline!) : '-', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: base.primary)),
+                  ],
+                ),
+                if (showRegisterPayment) ...[
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.payments_outlined),
+                    label: const Text('Registra pagamento'),
+                    onPressed: () => onRegisterPayment(s),
+                  ),
+                  const SizedBox(height: 8),
+                  Text('Residuo: € ${fmtCurrency.format(residuo)}', style: Theme.of(context).textTheme.bodyMedium),
+                ],
               ],
             ),
           ),
@@ -158,6 +327,21 @@ class _HeaderSection extends StatelessWidget {
     );
   }
   String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+}
+
+class _NegotiationChip extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.blue.withAlpha((0.12 * 255).round()),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.blue.withAlpha((0.18 * 255).round())),
+      ),
+      child: const Text('Negoziazione in corso', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.w600)),
+    );
+  }
 }
 
 class _SectionTitle extends StatelessWidget {
@@ -252,7 +436,7 @@ class _NotesSection extends StatelessWidget {
       decoration: BoxDecoration(
         color: base.surface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: base.outline.withOpacity(0.08)),
+        border: Border.all(color: base.outline.withAlpha((0.08 * 255).round())),
       ),
       child: notes == null || notes!.isEmpty
           ? const Text('— Nessuna nota —', style: TextStyle(color: Colors.black54))
@@ -291,9 +475,9 @@ class _StateChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withAlpha((0.12 * 255).round()),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.18)),
+        border: Border.all(color: color.withAlpha((0.18 * 255).round())),
       ),
       child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
     );
@@ -313,7 +497,7 @@ class _InstallmentsPreview extends StatelessWidget {
         decoration: BoxDecoration(
           color: base.surface,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: base.outline.withOpacity(0.08)),
+          border: Border.all(color: base.outline.withAlpha((0.08 * 255).round())),
         ),
         child: const Text('Nessun piano rate presente'),
       );
@@ -326,7 +510,7 @@ class _InstallmentsPreview extends StatelessWidget {
       decoration: BoxDecoration(
         color: base.surface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: base.outline.withOpacity(0.08)),
+        border: Border.all(color: base.outline.withAlpha((0.08 * 255).round())),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -366,7 +550,7 @@ class _InstallmentsPreview extends StatelessWidget {
   void _goToEdit(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => CaseDetailScreen(caseId: s.caseData.id, initialCase: s.caseData),
+        builder: (_) => CaseDetailEditScreen(caseId: s.caseData.id, initialCase: s.caseData),
       ),
     );
   }

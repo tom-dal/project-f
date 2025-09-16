@@ -52,6 +52,13 @@ class RemoveNewInstallmentPlaceholder extends CaseDetailEvent { final String tem
 class ApplyNewInstallmentsReplacePlan extends CaseDetailEvent {}
 class DeleteInstallmentPlanEvent extends CaseDetailEvent {}
 class DeleteCaseEvent extends CaseDetailEvent {}
+class RegisterCasePayment extends CaseDetailEvent {
+  final double amount;
+  final DateTime paymentDate;
+  RegisterCasePayment({required this.amount, required this.paymentDate});
+  @override
+  List<Object?> get props => [amount, paymentDate];
+}
 
 // STATES
 abstract class CaseDetailState extends Equatable {
@@ -77,6 +84,7 @@ class CaseDetailLoaded extends CaseDetailState {
   final Set<String> installmentDirty; // ids dirty
   final bool replacingPlan;
   final String? error;
+  final String? successMessage;
 
   CaseDetailLoaded({
     required this.caseData,
@@ -92,6 +100,7 @@ class CaseDetailLoaded extends CaseDetailState {
     required this.installmentDirty,
     required this.replacingPlan,
     this.error,
+    this.successMessage,
   });
 
   CaseDetailLoaded copyWith({
@@ -108,6 +117,7 @@ class CaseDetailLoaded extends CaseDetailState {
     Set<String>? installmentDirty,
     bool? replacingPlan,
     String? error,
+    String? successMessage,
   }) => CaseDetailLoaded(
     caseData: caseData ?? this.caseData,
     debtorName: debtorName ?? this.debtorName,
@@ -122,10 +132,11 @@ class CaseDetailLoaded extends CaseDetailState {
     installmentDirty: installmentDirty ?? this.installmentDirty,
     replacingPlan: replacingPlan ?? this.replacingPlan,
     error: error,
+    successMessage: successMessage,
   );
 
   @override
-  List<Object?> get props => [caseData.id, debtorName, owedAmount, state, nextDeadline, notes, ongoingNegotiations, dirty, saving, localInstallments, installmentDirty, replacingPlan, error];
+  List<Object?> get props => [caseData.id, debtorName, owedAmount, state, nextDeadline, notes, ongoingNegotiations, dirty, saving, localInstallments, installmentDirty, replacingPlan, error, successMessage];
 }
 
 class CaseDetailBloc extends Bloc<CaseDetailEvent, CaseDetailState> {
@@ -136,25 +147,7 @@ class CaseDetailBloc extends Bloc<CaseDetailEvent, CaseDetailState> {
     on<EditOwedAmount>((e, emit)=>_editField(emit, owedAmount: e.value));
     on<EditState>((e, emit)=>_editField(emit, state: e.value));
     on<EditNextDeadline>((e, emit)=>_editField(emit, nextDeadline: e.value));
-    on<EditNotes>((e, emit){
-      final s = state; if (s is! CaseDetailLoaded) return;
-      // Create new state allowing notes to become null
-      emit(CaseDetailLoaded(
-        caseData: s.caseData,
-        debtorName: s.debtorName,
-        owedAmount: s.owedAmount,
-        state: s.state,
-        nextDeadline: s.nextDeadline,
-        notes: e.value, // can be null
-        ongoingNegotiations: s.ongoingNegotiations,
-        dirty: true,
-        saving: s.saving,
-        localInstallments: s.localInstallments,
-        installmentDirty: s.installmentDirty,
-        replacingPlan: s.replacingPlan,
-        error: null,
-      ));
-    });
+    on<EditNotes>((e, emit)=>_editField(emit, notes: e.value));
     on<EditOngoingNegotiations>((e, emit)=>_editField(emit, ongoingNegotiations: e.value));
     on<SaveCaseEdits>(_onSaveCase);
     on<CreateInstallmentPlanEvent>(_onCreatePlan);
@@ -165,6 +158,7 @@ class CaseDetailBloc extends Bloc<CaseDetailEvent, CaseDetailState> {
     on<ApplyNewInstallmentsReplacePlan>(_onReplacePlan);
     on<DeleteInstallmentPlanEvent>(_onDeletePlan);
     on<DeleteCaseEvent>(_onDeleteCase);
+    on<RegisterCasePayment>(_onRegisterPayment);
   }
 
   Future<void> _onLoad(LoadCaseDetail e, Emitter<CaseDetailState> emit) async {
@@ -185,6 +179,7 @@ class CaseDetailBloc extends Bloc<CaseDetailEvent, CaseDetailState> {
         localInstallments: map,
         installmentDirty: {},
         replacingPlan: false,
+        successMessage: null,
       ));
     } catch (ex) {
       emit(CaseDetailError(ex.toString()));
@@ -194,14 +189,26 @@ class CaseDetailBloc extends Bloc<CaseDetailEvent, CaseDetailState> {
   void _editField(Emitter<CaseDetailState> emit,{String? debtorName,double? owedAmount,CaseState? state,DateTime? nextDeadline,String? notes,bool? ongoingNegotiations}){
     final s = this.state;
     if (s is! CaseDetailLoaded) return;
+    final newDebtor = debtorName ?? s.debtorName;
+    final newOwed = owedAmount ?? s.owedAmount;
+    final newState = state ?? s.state;
+    final newDeadline = nextDeadline ?? s.nextDeadline;
+    final newNotes = (notes == null) ? s.notes : notes; // permette null esplicito
+    final newNegotiations = ongoingNegotiations ?? s.ongoingNegotiations;
+    final dirty = newDebtor != s.caseData.debtorName ||
+      newOwed != s.caseData.owedAmount ||
+      newState != s.caseData.state ||
+      newDeadline != s.caseData.nextDeadlineDate ||
+      (newNotes ?? '') != (s.caseData.notes ?? '') ||
+      newNegotiations != (s.caseData.ongoingNegotiations ?? false);
     emit(s.copyWith(
-      debtorName: debtorName ?? s.debtorName,
-      owedAmount: owedAmount ?? s.owedAmount,
-      state: state ?? s.state,
-      nextDeadline: nextDeadline ?? s.nextDeadline,
-      notes: notes ?? s.notes,
-      ongoingNegotiations: ongoingNegotiations ?? s.ongoingNegotiations,
-      dirty: true,
+      debtorName: newDebtor,
+      owedAmount: newOwed,
+      state: newState,
+      nextDeadline: newDeadline,
+      notes: newNotes,
+      ongoingNegotiations: newNegotiations,
+      dirty: dirty,
     ));
   }
 
@@ -236,6 +243,7 @@ class CaseDetailBloc extends Bloc<CaseDetailEvent, CaseDetailState> {
         localInstallments: map,
         installmentDirty: {},
         replacingPlan: false,
+        successMessage: 'Modifiche salvate',
       ));
     } catch (ex) {
       emit(s.copyWith(saving:false,error: ex.toString()));
@@ -335,5 +343,33 @@ class CaseDetailBloc extends Bloc<CaseDetailEvent, CaseDetailState> {
     final s = state; if (s is! CaseDetailLoaded) return;
     try { await api.deleteDebtCase(s.caseData); emit(CaseDetailDeleted()); }
     catch(ex){ emit(CaseDetailError(ex.toString())); }
+  }
+
+  Future<void> _onRegisterPayment(RegisterCasePayment e, Emitter<CaseDetailState> emit) async {
+    final s = state; if (s is! CaseDetailLoaded) return;
+    emit(s.copyWith(saving: true, error: null, successMessage: null));
+    try {
+      await api.registerPayment(caseId: s.caseData.id, amount: e.amount, paymentDate: e.paymentDate);
+      // Reload updated case directly
+      final data = await api.getCaseById(s.caseData.id);
+      final map = <String, Installment>{ for (final inst in (data.installments ?? [])) inst.id : inst };
+      emit(CaseDetailLoaded(
+        caseData: data,
+        debtorName: data.debtorName,
+        owedAmount: data.owedAmount,
+        state: data.state,
+        nextDeadline: data.nextDeadlineDate,
+        notes: data.notes,
+        ongoingNegotiations: data.ongoingNegotiations ?? false,
+        dirty: false,
+        saving: false,
+        localInstallments: map,
+        installmentDirty: {},
+        replacingPlan: false,
+        successMessage: 'Pagamento registrato',
+      ));
+    } catch (ex) {
+      emit(s.copyWith(saving: false, error: ex.toString(), successMessage: null));
+    }
   }
 }

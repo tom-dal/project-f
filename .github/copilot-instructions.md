@@ -215,3 +215,6 @@ source ~/commands.sh && ghcr_login
 ./frontend/build-and-push-frontend.sh auto
 
 # USER PREFERENCE: Per questa fase di sviluppo, utilizzare esclusivamente data.sql sia in produzione che nei test. Non creare scipt sql solo per testing.
+
+// USER PREFERENCE: In Flutter, do NOT use `.withOpacity()` for colors. Use `.withAlpha()` instead to avoid deprecation warnings and ensure precision.
+// Example: color: Colors.blue.withAlpha((0.12 * 255).round())
