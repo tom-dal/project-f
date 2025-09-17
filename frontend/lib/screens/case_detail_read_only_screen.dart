@@ -121,114 +121,194 @@ class _CaseDetailReadOnlyViewState extends State<_CaseDetailReadOnlyView> {
   }
 
   void _openRegisterPaymentDialog(CaseDetailLoaded s) {
-    final amountCtrl = TextEditingController();
-    DateTime selectedDate = DateTime.now();
-    bool useResiduo = false;
-    final formKey = GlobalKey<FormState>();
     final residuo = s.caseData.remainingAmount ?? (s.owedAmount - (s.caseData.totalPaidAmount ?? 0));
+    if (residuo <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nessun importo residuo da registrare')),
+      );
+      return;
+    }
+    final amountCtrl = TextEditingController(
+      text: NumberFormat('#,##0.00', 'it_IT').format(residuo).replaceAll('\u00A0',''),
+    );
+    DateTime selectedDate = DateTime.now();
+    bool pagamentoParziale = false; // USER PREFERENCE: partial payment toggle activates manual amount entry
+    final formKey = GlobalKey<FormState>();
 
     showDialog(
       context: context,
       builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setState) {
-            void applyResiduo(bool v){
-              setState(() {
-                useResiduo = v;
-                if (useResiduo) {
-                  amountCtrl.text = NumberFormat('#,##0.00', 'it_IT').format(residuo).replaceAll('\u00A0','');
-                } else {
-                  amountCtrl.clear();
-                }
-              });
+        return StatefulBuilder(builder: (ctx, setState) {
+          String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2,'0')}/${d.month.toString().padLeft(2,'0')}/${d.year}';
+
+          Future<void> _pickDate() async {
+            final now = DateTime.now();
+            final picked = await showDatePicker(
+              context: ctx,
+              initialDate: selectedDate,
+              firstDate: DateTime(now.year - 1),
+              lastDate: DateTime(now.year + 5),
+              locale: const Locale('it', 'IT'), // USER PREFERENCE: Italian locale
+              helpText: 'Data pagamento',
+              builder: (context, child) {
+                final theme = Theme.of(context);
+                return Theme(
+                  data: theme.copyWith(
+                    colorScheme: theme.colorScheme.copyWith(
+                      primary: theme.colorScheme.primary,
+                      surface: theme.colorScheme.surface,
+                      secondary: theme.colorScheme.secondary,
+                    ),
+                    datePickerTheme: const DatePickerThemeData(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(20))),
+                    ),
+                  ),
+                  child: child ?? const SizedBox.shrink(),
+                );
+              },
+            );
+            if (picked != null) {
+              setState(() => selectedDate = DateTime(picked.year, picked.month, picked.day));
             }
-            return AlertDialog(
-              title: const Text('Registra pagamento'),
-              content: Form(
-                key: formKey,
-                child: SizedBox(
-                  width: 360,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextFormField(
-                        controller: amountCtrl,
-                        decoration: const InputDecoration(labelText: 'Importo (€)'),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-                          FilteringTextInputFormatter.deny(RegExp(r'([.,].*[.,])')),
-                          TextInputFormatter.withFunction((oldValue,newValue){
-                            final parts = newValue.text.split(RegExp(r'[.,]'));
-                            if (parts.length==2 && parts[1].length>2) return oldValue; return newValue;
-                          })
-                        ],
-                        validator: (v){
-                          if (useResiduo) return null;
-                          final res = normalizeFlexibleItalianAmount(v??'');
-                          if (res.error!=null) return res.error;
-                          return null;
-                        },
-                        enabled: !useResiduo,
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Switch(value: useResiduo && residuo>0, onChanged: residuo>0 ? (v)=>applyResiduo(v) : null),
-                          const SizedBox(width: 4),
-                          Expanded(child: Text('Usa importo residuo (${residuo>0? '€ '+residuo.toStringAsFixed(2):'0'})')),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      InkWell(
-                        onTap: () async {
-                          final now = DateTime.now();
-                          final picked = await showDatePicker(
-                            context: ctx,
-                            firstDate: DateTime(now.year-1),
-                            lastDate: DateTime(now.year+5),
-                            initialDate: selectedDate,
-                            helpText: 'Data pagamento',
-                          );
-                          if (picked!=null) setState(()=> selectedDate = DateTime(picked.year, picked.month, picked.day));
-                        },
-                        child: InputDecorator(
-                          decoration: const InputDecoration(labelText: 'Data pagamento'),
-                          child: Row(
-                            children: [
-                              Expanded(child: Text('${selectedDate.day.toString().padLeft(2,'0')}/${selectedDate.month.toString().padLeft(2,'0')}/${selectedDate.year}')),
-                              const Icon(Icons.date_range, size: 18)
+          }
+
+          String? _amountValidator(String? v) {
+            if (!pagamentoParziale) return null; // full payment, skip manual validation
+            final res = normalizeFlexibleItalianAmount(v ?? '');
+            if (!res.isValid) return res.error;
+            final value = res.value!;
+            if (value <= 0) return 'Importo non valido';
+            if (value > residuo + 0.0001) return 'Importo superiore al residuo';
+            return null;
+          }
+
+          void _submit() {
+            if (pagamentoParziale) {
+              if (!(formKey.currentState?.validate() ?? false)) return;
+            }
+            double amount;
+            if (pagamentoParziale) {
+              final res = normalizeFlexibleItalianAmount(amountCtrl.text);
+              if (!res.isValid) return; // safety
+              amount = res.value!;
+            } else {
+              amount = residuo; // full payment
+            }
+            context.read<CaseDetailBloc>().add(
+              RegisterCasePayment(amount: amount, paymentDate: selectedDate),
+            );
+            Navigator.pop(ctx);
+          }
+
+          final base = Theme.of(context).colorScheme;
+          final inputDecoration = InputDecoration(
+            labelText: 'Importo (€)',
+            filled: true,
+            fillColor: pagamentoParziale ? base.surface : base.surface.withAlpha((0.5 * 255).round()),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: base.outline.withAlpha((0.30 * 255).round()))),
+            disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: base.outline.withAlpha((0.15 * 255).round()))),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          );
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 12),
+            contentPadding: const EdgeInsets.fromLTRB(24, 12, 24, 4),
+            actionsPadding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            title: Text('Registra pagamento', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+            content: Form(
+              key: formKey,
+              child: SizedBox(
+                width: 480,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: amountCtrl,
+                            enabled: pagamentoParziale,
+                            validator: _amountValidator,
+                            decoration: inputDecoration,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                              FilteringTextInputFormatter.deny(RegExp(r'([.,].*[.,])')),
+                              TextInputFormatter.withFunction((oldValue, newValue) {
+                                final parts = newValue.text.split(RegExp(r'[.,]'));
+                                if (parts.length == 2 && parts[1].length > 2) return oldValue; return newValue;
+                              })
                             ],
                           ),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: pagamentoParziale,
+                      onChanged: (v) {
+                        setState(() {
+                          pagamentoParziale = v ?? false;
+                          if (!pagamentoParziale) {
+                            // reset to full amount
+                            amountCtrl.text = NumberFormat('#,##0.00', 'it_IT').format(residuo).replaceAll('\u00A0','');
+                          } else {
+                            amountCtrl.selection = TextSelection(baseOffset: 0, extentOffset: amountCtrl.text.length);
+                          }
+                        });
+                      },
+                      title: const Text('Pagamento parziale'),
+                      subtitle: pagamentoParziale ? Text('Residuo massimo: € ${NumberFormat('#,##0.00', 'it_IT').format(residuo)}', style: const TextStyle(fontSize: 12)) : null,
+                      controlAffinity: ListTileControlAffinity.leading,
+                    ),
+                    const SizedBox(height: 12),
+                    // Data pagamento picker styled similar to pills
+                    InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: _pickDate,
+                      child: InputDecorator(
+                        decoration: InputDecoration(
+                          labelText: 'Data pagamento',
+                          filled: true,
+                          fillColor: base.surface,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: base.outline.withAlpha((0.30 * 255).round()))),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: base.outline.withAlpha((0.30 * 255).round()))),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(child: Text(_fmtDate(selectedDate), style: const TextStyle(fontWeight: FontWeight.w500))),
+                            const Icon(Icons.date_range, size: 20),
+                          ],
+                        ),
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                 ),
               ),
-              actions: [
-                TextButton(onPressed: ()=>Navigator.pop(ctx), child: const Text('Annulla')),
-                ElevatedButton(
-                  onPressed: (){
-                    if (formKey.currentState?.validate()==true) {
-                      double amount;
-                      if (useResiduo) {
-                        amount = residuo;
-                      } else {
-                        final res = normalizeFlexibleItalianAmount(amountCtrl.text);
-                        if (!res.isValid) return; else amount = res.value!;
-                      }
-                      context.read<CaseDetailBloc>().add(RegisterCasePayment(amount: amount, paymentDate: selectedDate));
-                      Navigator.pop(ctx);
-                    }
-                  },
-                  child: const Text('Conferma'),
-                )
-              ],
-            );
-          },
-        );
-      }
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Annulla'),
+              ),
+              ElevatedButton.icon(
+                onPressed: () {
+                  _submit();
+                },
+                icon: const Icon(Icons.check, size: 18),
+                label: const Text('Conferma'),
+              ),
+            ],
+          );
+        });
+      },
     );
   }
 }
