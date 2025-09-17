@@ -118,83 +118,103 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
           );
         }
         final s = state as CaseDetailLoaded;
-        final wide = MediaQuery.of(context).size.width > 780;
         return Scaffold(
           appBar: AppBar(
             title: Text('Pratica ${s.caseData.id.substring(0, 6)}'),
+            actions: [
+              // Reset button
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: TextButton(
+                  onPressed: (s.dirty && !s.saving) ? () {
+                    // Unfocus to allow controllers to be overwritten by listener
+                    _amountFocus.unfocus();
+                    _notesFocus.unfocus();
+                    FocusScope.of(context).unfocus();
+                    context.read<CaseDetailBloc>().add(ResetCaseEdits());
+                  } : null,
+                  style: TextButton.styleFrom(
+                    foregroundColor: (s.dirty && !s.saving) ? Theme.of(context).colorScheme.primary : Theme.of(context).disabledColor,
+                    backgroundColor: Colors.transparent,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  ),
+                  child: Row(
+                    children: const [Icon(Icons.restart_alt, size: 18), SizedBox(width: 4), Text('Reset')],
+                  ),
+                ),
+              ),
+              // Save button
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: TextButton(
+                  onPressed: (s.dirty && !s.saving) ? () {
+                    if (_formKey.currentState?.validate() ?? false) {
+                      context.read<CaseDetailBloc>().add(SaveCaseEdits());
+                    } else { setState((){}); }
+                  } : null,
+                  style: TextButton.styleFrom(
+                    foregroundColor: (s.dirty && !s.saving) ? Theme.of(context).colorScheme.onPrimary : Theme.of(context).disabledColor,
+                    backgroundColor: (s.dirty && !s.saving) ? Theme.of(context).colorScheme.primary : Colors.transparent,
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  ),
+                  child: Row(
+                    children: const [Icon(Icons.save, size: 18), SizedBox(width: 6), Text('Salva')],
+                  ),
+                ),
+              ),
+            ],
             bottom: s.saving ? const PreferredSize(
               preferredSize: Size.fromHeight(3),
               child: LinearProgressIndicator(minHeight: 3),
             ) : null,
           ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: s.dirty && !s.saving ? () {
-              if (_formKey.currentState?.validate()==true) {
-                context.read<CaseDetailBloc>().add(SaveCaseEdits());
-              }
-            } : null,
-            icon: const Icon(Icons.save),
-            label: const Text('Salva'),
-          ),
           body: Form(
             key: _formKey,
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 20),
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1100),
-                  child: Column(
+                  constraints: const BoxConstraints(maxWidth: 1200),
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _HeaderSection(
-                        s: s,
-                        debtorCtrl: _debtorCtrl,
-                        amountCtrl: _amountCtrl,
-                        amountFocus: _amountFocus,
-                        bloc: context.read<CaseDetailBloc>(),
-                      ),
-                      const SizedBox(height: 32),
-                      _SectionTitle('Note'),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 8),
-                        child: Row(
+                      // LEFT COLUMN
+                      Expanded(
+                        flex: 3,
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: TextFormField(
-                                controller: _notesCtrl,
-                                focusNode: _notesFocus,
-                                decoration: const InputDecoration(labelText: 'Note', alignLabelWithHint: true, hintText: 'Inserisci eventuali annotazioni'),
-                                maxLines: 4,
-                                onChanged: (v)=> context.read<CaseDetailBloc>().add(EditNotes(v.isEmpty? null : v)),
-                              ),
+                            _EditableFieldsCard(
+                              s: s,
+                              debtorCtrl: _debtorCtrl,
+                              amountCtrl: _amountCtrl,
+                              amountFocus: _amountFocus,
+                              bloc: context.read<CaseDetailBloc>(),
                             ),
-                            const SizedBox(width: 12),
-                            Column(
-                              children: [
-                                IconButton(
-                                  tooltip: 'Svuota note',
-                                  icon: const Icon(Icons.clear),
-                                  onPressed: _notesCtrl.text.isEmpty ? null : () {
-                                    _notesCtrl.clear();
-                                    context.read<CaseDetailBloc>().add(EditNotes(null));
-                                    setState(() {});
-                                  },
-                                ),
-                              ],
-                            )
+                            const SizedBox(height: 28),
+                            _NotesCard(
+                              s: s,
+                              notesCtrl: _notesCtrl,
+                              notesFocus: _notesFocus,
+                              bloc: context.read<CaseDetailBloc>(),
+                            ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      _SectionTitle('Dati pratica'),
-                      const SizedBox(height: 8),
-                      _EditFieldsGrid(s: s, twoColumns: wide),
-                      const SizedBox(height: 32),
-                      _SectionTitle('Rateizzazione'),
-                      const SizedBox(height: 8),
-                      _buildInstallmentsSection(context, s),
-                      const SizedBox(height: 32),
+                      const SizedBox(width: 40),
+                      // RIGHT COLUMN
+                      Expanded(
+                        flex: 2,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            _SimplePlaceholderCard(title: 'Pagamenti', text: 'Gestione pagamenti disponibile in vista dedicata.'),
+                            SizedBox(height: 28),
+                            _SimplePlaceholderCard(title: 'Rateizzazione', text: 'Gestione rate disponibile in vista dedicata.'),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -246,10 +266,6 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
             Text('Nessun piano presente', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             const Text('Crea un piano di rateizzazione. Le singole rate potranno essere modificate successivamente.'),
-            const SizedBox(height: 12),
-            _CreatePlanForm(onCreate: (n, first, amt, freq){
-              bloc.add(CreateInstallmentPlanEvent(numberOfInstallments: n, firstDueDate: first, installmentAmount: amt, frequencyDays: freq));
-            }),
           ],
         ),
       );
@@ -295,20 +311,8 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
                     color: rowColor != null ? WidgetStatePropertyAll(rowColor) : null,
                     cells: [
                       DataCell(Row(children:[Text(inst.installmentNumber.toString()), if(dirty) const SizedBox(width:4), if(dirty) const Text('*', style: TextStyle(color: Colors.orange,fontWeight: FontWeight.bold))])),
-                      DataCell(_AmountCell(
-                        amount: inst.amount,
-                        enabled: !isPlaceholder || true,
-                        formatter: _itFormatter,
-                        onChanged: (val){
-                          final parsed = _parseAmount(val);
-                          if (parsed!=null) bloc.add(UpdateInstallmentLocal(installmentId: inst.id, amount: parsed));
-                        },
-                      )),
-                      DataCell(_DueDateCell(
-                        date: inst.dueDate,
-                        enabled: !isPlaceholder || true,
-                        onPick: (d){ bloc.add(UpdateInstallmentLocal(installmentId: inst.id, dueDate: d)); },
-                      )),
+                      DataCell(Text('€ ${_itFormatter.format(inst.amount)}')),
+                      DataCell(Text(inst.dueDate != null ? _fmtDate(inst.dueDate!) : '-')),
                       DataCell(Text(inst.paid==true? 'Pagata' : 'Da pagare', style: TextStyle(color: inst.paid==true? Colors.green: Colors.orange))),
                       DataCell(Row(
                         children: [
@@ -409,128 +413,139 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
     if (val == null || val <= 0) return {'error': 'Importo non valido'};
     return {'value': val};
   }
+  String _fmtDate(DateTime d) {
+    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+  }
 }
 
-class _HeaderSection extends StatelessWidget {
+// --- COMPONENTI UI ---
+class _EditableFieldsCard extends StatelessWidget {
   final CaseDetailLoaded s;
   final TextEditingController debtorCtrl;
   final TextEditingController amountCtrl;
   final FocusNode amountFocus;
   final CaseDetailBloc bloc;
-  const _HeaderSection({required this.s, required this.debtorCtrl, required this.amountCtrl, required this.amountFocus, required this.bloc});
+  const _EditableFieldsCard({required this.s, required this.debtorCtrl, required this.amountCtrl, required this.amountFocus, required this.bloc});
+
   @override
   Widget build(BuildContext context) {
-    final base = Theme.of(context).colorScheme;
-    if (amountCtrl.text.isEmpty || amountCtrl.text == '0' || amountCtrl.text == '0,00') {
-      amountCtrl.text = NumberFormat('#,##0.00', 'it_IT').format(s.owedAmount).replaceAll('\u00A0', '');
-    }
+    final cs = Theme.of(context).colorScheme;
+    final dirtyDebtor = s.debtorName != s.caseData.debtorName;
+    final dirtyAmount = s.owedAmount != s.caseData.owedAmount;
+    final dirtyState = s.state != s.caseData.state;
+    final dirtyNeg = s.ongoingNegotiations != (s.caseData.ongoingNegotiations ?? false);
+
+    InputDecoration _dec(String label,{Widget? prefixIcon, bool dirty=false, String? hint}) => InputDecoration(
+      labelText: label,
+      hintText: hint,
+      prefixIcon: prefixIcon,
+      filled: true,
+      fillColor: cs.surface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.outline.withAlpha(60))),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: dirty? cs.primary.withAlpha(160): cs.outline.withAlpha(70))),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.primary, width: 2)),
+    );
+
+    final debtorField = TextFormField(
+      controller: debtorCtrl,
+      decoration: _dec('Debitore', dirty: dirtyDebtor, hint: 'Nome e cognome / Ragione sociale'),
+      onChanged: (v)=> bloc.add(EditDebtorName(v)),
+      validator: (v){ if(v==null || v.trim().isEmpty) return 'Obbligatorio'; if(v.trim().length<2) return 'Min 2 caratteri'; return null; },
+    );
+    final stateField = _StateDropdown(dirty: dirtyState, value: s.state, onChanged: (st)=> bloc.add(EditState(st)));
+    final amountField = TextFormField(
+      controller: amountCtrl,
+      focusNode: amountFocus,
+      decoration: _dec('Importo dovuto', dirty: dirtyAmount, prefixIcon: const Icon(Icons.euro)),
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+      validator: (v){ if(v==null || v.trim().isEmpty) return 'Obbligatorio'; final p = double.tryParse(v.replaceAll('.', '').replaceAll(',', '.')); if(p==null || p<=0) return 'Valore non valido'; return null; },
+      onChanged: (v){ final p = double.tryParse(v.replaceAll('.', '').replaceAll(',', '.')); if(p!=null) bloc.add(EditOwedAmount(p)); },
+    );
+    final negotiationField = _NegotiationSwitch(dirty: dirtyNeg, value: s.ongoingNegotiations, onChanged: (val)=> bloc.add(EditOngoingNegotiations(val)));
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(24,24,24,24),
       decoration: BoxDecoration(
-        color: base.surface,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: const Offset(0,2))],
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: const Offset(0,2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text('Dettagli principali', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 20),
+          // Row 1
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: TextFormField(
-                  controller: debtorCtrl,
-                  decoration: const InputDecoration(labelText: 'Debitore'),
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
-                  onChanged: (v) => bloc.add(EditDebtorName(v.trim())),
-                  validator: (v) => (v==null||v.trim().length<2)?'Nome non valido':null,
-                ),
-              ),
+              Expanded(child: debtorField),
               const SizedBox(width: 24),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Negoziazione in corso'),
-                      Switch(
-                        value: s.ongoingNegotiations,
-                        onChanged: (v)=> bloc.add(EditOngoingNegotiations(v)),
-                      ),
-                    ],
-                  ),
-                ],
-              )
+              SizedBox(width: 260, child: stateField),
             ],
           ),
           const SizedBox(height: 20),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<CaseState>(
-                  initialValue: s.state,
-                  decoration: const InputDecoration(labelText: 'Stato'),
-                  items: CaseState.values.map((cs) => DropdownMenuItem(
-                    value: cs,
-                    child: Text(_readableState(cs)),
-                  )).toList(),
-                  onChanged: (val) { if (val != null) bloc.add(EditState(val)); },
-                ),
-              ),
-              const SizedBox(width: 32),
-              Expanded(
-                child: TextFormField(
-                  controller: amountCtrl,
-                  focusNode: amountFocus,
-                  decoration: const InputDecoration(labelText: 'Importo dovuto (€)'),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-                    FilteringTextInputFormatter.deny(RegExp(r'([.,].*[.,])')),
-                    TextInputFormatter.withFunction((oldValue, newValue) {
-                      final text = newValue.text;
-                      final parts = text.split(RegExp(r'[.,]'));
-                      if (parts.length == 2 && parts[1].length > 2) return oldValue;
-                      return newValue;
-                    }),
-                  ],
-                  onChanged: (v){
-                    final res = (context.findAncestorStateOfType<_CaseDetailViewState>()?._normalizeAmount(v)) ?? {};
-                    if (res['value'] != null) bloc.add(EditOwedAmount(res['value'] as double));
-                  },
-                  validator: (v){
-                    final res = (context.findAncestorStateOfType<_CaseDetailViewState>()?._normalizeAmount(v??'')) ?? {'error':'Importo non valido'};
-                    return res['error'];
-                  },
-                ),
-              ),
-              const SizedBox(width: 32),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text('Scadenza:', style: Theme.of(context).textTheme.labelLarge),
-                    Text(s.nextDeadline != null ? _fmtDate(s.nextDeadline!) : '-', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: base.primary)),
-                  ],
-                ),
-              ),
-            ],
-          ),
+          // Row 2
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: amountField),
+                const SizedBox(width: 24),
+                SizedBox(width: 260, child: negotiationField),
+              ],
+            ),
         ],
       ),
     );
   }
-  String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
-  String _readableState(CaseState cs) {
-    switch (cs) {
-      case CaseState.messaInMoraDaFare: return 'Messa in mora da fare';
-      case CaseState.messaInMoraInviata: return 'Messa in mora inviata';
-      case CaseState.contestazioneDaRiscontrare: return 'Contestazione da riscontrare';
-      case CaseState.depositoRicorso: return 'Deposito ricorso';
-      case CaseState.decretoIngiuntivoDaNotificare: return 'D.I. da notificare';
-      case CaseState.decretoIngiuntivoNotificato: return 'D.I. notificato';
+}
+
+class _StateDropdown extends StatelessWidget {
+  final bool dirty; final CaseState value; final ValueChanged<CaseState> onChanged;
+  const _StateDropdown({required this.dirty, required this.value, required this.onChanged});
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final borderColor = dirty? cs.primary.withAlpha(160): cs.outline.withAlpha(70);
+    return Tooltip(
+      message: 'Modifica lo stato procedurale della pratica',
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: 'Stato',
+          filled: true,
+          fillColor: cs.surface,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: borderColor)),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: borderColor)),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.primary, width: 2)),
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<CaseState>(
+            isExpanded: true,
+            value: value,
+            onChanged: (v){ if(v!=null) onChanged(v); },
+            items: CaseState.values.map((csVal){
+              return DropdownMenuItem(
+                value: csVal,
+                child: Text(_label(csVal), overflow: TextOverflow.ellipsis),
+              );
+            }).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+  String _label(CaseState st){
+    switch(st){
+      case CaseState.messaInMoraDaFare: return 'Messa in Mora da Fare';
+      case CaseState.messaInMoraInviata: return 'Messa in Mora Inviata';
+      case CaseState.contestazioneDaRiscontrare: return 'Contestazione da Riscontrare';
+      case CaseState.depositoRicorso: return 'Deposito Ricorso';
+      case CaseState.decretoIngiuntivoDaNotificare: return 'DI da Notificare';
+      case CaseState.decretoIngiuntivoNotificato: return 'DI Notificato';
       case CaseState.precetto: return 'Precetto';
       case CaseState.pignoramento: return 'Pignoramento';
       case CaseState.completata: return 'Completata';
@@ -538,294 +553,104 @@ class _HeaderSection extends StatelessWidget {
   }
 }
 
-class _SectionTitle extends StatelessWidget {
-  final String title;
-  const _SectionTitle(this.title);
+class _NegotiationSwitch extends StatelessWidget {
+  final bool dirty; final bool value; final ValueChanged<bool> onChanged;
+  const _NegotiationSwitch({required this.dirty, required this.value, required this.onChanged});
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Row(
-        children: [
-          Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
-          const SizedBox(width: 8),
-          Expanded(child: Divider(thickness: 1)),
-        ],
-      ),
-    );
-  }
-}
-
-class _EditFieldsGrid extends StatelessWidget {
-  final CaseDetailLoaded s;
-  final bool twoColumns;
-  const _EditFieldsGrid({required this.s, required this.twoColumns});
-  @override
-  Widget build(BuildContext context) {
-    final fields = [
-      _FieldData(label: 'Ultima modifica stato', value: _fmtDate(s.caseData.lastStateDate)),
-      if (s.caseData.createdDate != null) _FieldData(label: 'Creata il', value: _fmtDate(s.caseData.createdDate!)),
-      if (s.caseData.lastModifiedDate != null) _FieldData(label: 'Aggiornata il', value: _fmtDate(s.caseData.lastModifiedDate!)),
-      _FieldData(label: 'Negoziazione in corso', value: s.ongoingNegotiations ? 'Sì' : 'No'),
-      if (s.caseData.totalPaidAmount != null) _FieldData(label: 'Totale pagato', value: '€ ${s.caseData.totalPaidAmount!.toStringAsFixed(2)}'),
-      if (s.caseData.remainingAmount != null) _FieldData(label: 'Residuo', value: '€ ${s.caseData.remainingAmount!.toStringAsFixed(2)}'),
-      if (s.caseData.createdBy != null) _FieldData(label: 'Creato da', value: s.caseData.createdBy!),
-      if (s.caseData.lastModifiedBy != null) _FieldData(label: 'Ultima modifica da', value: s.caseData.lastModifiedBy!),
-    ];
-    final children = fields.map((f) => _FieldTile(data: f)).toList();
-    if (twoColumns) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Wrap(
-          spacing: 32,
-            runSpacing: 20,
-          children: children.map((w) => SizedBox(width: 320, child: w)).toList(),
-        ),
-      );
-    } else {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          children: [for (final w in children) Padding(padding: const EdgeInsets.only(bottom: 20), child: w)],
-        ),
-      );
-    }
-  }
-  String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
-}
-class _FieldData {
-  final String label;
-  final String value;
-  _FieldData({required this.label, required this.value});
-}
-class _FieldTile extends StatelessWidget {
-  final _FieldData data;
-  const _FieldTile({required this.data});
-  @override
-  Widget build(BuildContext context) {
-    final base = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        Text(data.label, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: base.secondary)),
-        const SizedBox(height: 4),
-        Text(data.value, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500)),
+        Text('Negoziazione in corso', style: Theme.of(context).textTheme.labelLarge),
+        Switch(
+          value: value,
+          onChanged: (v)=> onChanged(v),
+        )
       ],
     );
   }
 }
 
-class _AmountCell extends StatefulWidget {
-  final double amount;
-  final bool enabled;
-  final NumberFormat formatter;
-  final ValueChanged<String> onChanged;
-  const _AmountCell({required this.amount, required this.enabled, required this.formatter, required this.onChanged});
-  @override
-  State<_AmountCell> createState() => _AmountCellState();
-}
-class _AmountCellState extends State<_AmountCell> {
-  late TextEditingController _ctrl;
-  final _focus = FocusNode();
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = TextEditingController(text: widget.formatter.format(widget.amount).replaceAll('\u00A0',''));
-    _focus.addListener(() {
-      if (!_focus.hasFocus) {
-        final parsed = _parse(_ctrl.text);
-        if (parsed != null) {
-          final formatted = widget.formatter.format(parsed).replaceAll('\u00A0','');
-          if (_ctrl.text != formatted) _ctrl.text = formatted;
-        }
-      }
-    });
-  }
-  double? _parse(String raw){
-    final cleaned = raw.trim().replaceAll('.', '').replaceAll(',', '.');
-    return double.tryParse(cleaned);
-  }
-  @override
-  void didUpdateWidget(covariant _AmountCell oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!_focus.hasFocus && oldWidget.amount != widget.amount) {
-      _ctrl.text = widget.formatter.format(widget.amount).replaceAll('\u00A0','');
-    }
-  }
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    _focus.dispose();
-    super.dispose();
-  }
+class _NotesCard extends StatelessWidget {
+  final CaseDetailLoaded s; final TextEditingController notesCtrl; final FocusNode notesFocus; final CaseDetailBloc bloc;
+  const _NotesCard({required this.s, required this.notesCtrl, required this.notesFocus, required this.bloc});
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 110,
-      child: TextField(
-        controller: _ctrl,
-        focusNode: _focus,
-        enabled: widget.enabled,
-        decoration: const InputDecoration(border: InputBorder.none, isDense: true),
-        textAlign: TextAlign.right,
-        style: const TextStyle(fontSize: 14),
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        inputFormatters: [
-          FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-          FilteringTextInputFormatter.deny(RegExp(r'([.,].*[.,])')),
-          TextInputFormatter.withFunction((oldValue, newValue){
-            final parts = newValue.text.split(RegExp(r'[.,]'));
-            if (parts.length==2 && parts[1].length>2) return oldValue; return newValue;
-          })
-        ],
-        onChanged: widget.onChanged,
+    final cs = Theme.of(context).colorScheme;
+    final dirty = (s.notes ?? '') != (s.caseData.notes ?? '');
+    final hasContent = (notesCtrl.text.trim().isNotEmpty);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: const Offset(0,2))],
       ),
-    );
-  }
-}
-
-class _DueDateCell extends StatelessWidget {
-  final DateTime date;
-  final bool enabled;
-  final ValueChanged<DateTime> onPick;
-  const _DueDateCell({required this.date, required this.enabled, required this.onPick});
-  @override
-  Widget build(BuildContext context) {
-    final txt = '${date.day.toString().padLeft(2,'0')}/${date.month.toString().padLeft(2,'0')}/${date.year}';
-    return InkWell(
-      onTap: !enabled ? null : () async {
-        final picked = await showDatePicker(
-          context: context,
-          firstDate: DateTime(DateTime.now().year-1),
-          lastDate: DateTime(DateTime.now().year+5),
-          initialDate: date,
-          helpText: 'Nuova scadenza rata',
-        );
-        if (picked != null) {
-          onPick(DateTime(picked.year, picked.month, picked.day));
-        }
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-        child: Row(
-          children: [
-            Text(txt, style: TextStyle(fontSize: 14, color: enabled ? Colors.blueGrey[800] : Colors.grey)),
-            if (enabled) const SizedBox(width: 4),
-            if (enabled) const Icon(Icons.edit_calendar, size: 16, color: Colors.blueGrey)
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CreatePlanForm extends StatefulWidget {
-  final void Function(int numberOfInstallments, DateTime firstDueDate, double installmentAmount, int frequencyDays) onCreate;
-  const _CreatePlanForm({required this.onCreate});
-  @override
-  State<_CreatePlanForm> createState() => _CreatePlanFormState();
-}
-class _CreatePlanFormState extends State<_CreatePlanForm> {
-  final _formKey = GlobalKey<FormState>();
-  final _nCtrl = TextEditingController(text: '3');
-  final _amtCtrl = TextEditingController();
-  final _freqCtrl = TextEditingController(text: '30');
-  DateTime _firstDate = DateTime.now().add(const Duration(days: 30));
-
-  @override
-  void dispose() {
-    _nCtrl.dispose();
-    _amtCtrl.dispose();
-    _freqCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Form(
-      key: _formKey,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(
-            spacing: 16,
-            runSpacing: 12,
+          Row(
             children: [
-              SizedBox(
-                width: 120,
-                child: TextFormField(
-                  controller: _nCtrl,
-                  decoration: const InputDecoration(labelText: 'N. Rate'),
-                  keyboardType: TextInputType.number,
-                  validator: (v){
-                    final n = int.tryParse(v??'');
-                    if (n==null || n<1 || n>120) return '1-120';
-                    return null;
-                  },
-                ),
-              ),
-              SizedBox(
-                width: 150,
-                child: TextFormField(
-                  controller: _amtCtrl,
-                  decoration: const InputDecoration(labelText: 'Importo rata'),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
-                  validator: (v){
-                    final res = normalizeFlexibleItalianAmount(v??'');
-                    if (res.error!=null) return res.error;
-                    return null;
-                  },
-                ),
-              ),
-              SizedBox(
-                width: 140,
-                child: TextFormField(
-                  controller: _freqCtrl,
-                  decoration: const InputDecoration(labelText: 'Frequenza (gg)'),
-                  keyboardType: TextInputType.number,
-                  validator: (v){
-                    final f = int.tryParse(v??'');
-                    if (f==null || f<1 || f>365) return '1-365';
-                    return null;
-                  },
-                ),
-              ),
-              InkWell(
-                onTap: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    firstDate: DateTime.now(),
-                    lastDate: DateTime(DateTime.now().year+5),
-                    initialDate: _firstDate,
-                    helpText: 'Prima scadenza',
-                  );
-                  if (picked!=null) setState(()=> _firstDate = DateTime(picked.year,picked.month,picked.day));
-                },
-                child: InputDecorator(
-                  decoration: const InputDecoration(labelText: 'Prima scadenza'),
-                  child: Text('${_firstDate.day.toString().padLeft(2,'0')}/${_firstDate.month.toString().padLeft(2,'0')}/${_firstDate.year}'),
+              Expanded(child: Text('Note', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600))),
+              TextButton.icon(
+                onPressed: hasContent ? () {
+                  notesCtrl.clear();
+                  bloc.add(EditNotes(null));
+                } : null,
+                icon: const Icon(Icons.clear, size: 18),
+                label: const Text('Svuota'),
+                style: TextButton.styleFrom(
+                  foregroundColor: hasContent ? cs.primary : Theme.of(context).disabledColor,
                 ),
               )
             ],
           ),
-          const SizedBox(height: 12),
-          ElevatedButton.icon(
-            icon: const Icon(Icons.playlist_add),
-            label: const Text('Crea piano'),
-            onPressed: () {
-              if (_formKey.currentState?.validate()==true) {
-                final n = int.parse(_nCtrl.text);
-                final freq = int.parse(_freqCtrl.text);
-                final amtRes = normalizeFlexibleItalianAmount(_amtCtrl.text);
-                final amt = amtRes.value!;
-                widget.onCreate(n, _firstDate, amt, freq);
-              }
-            },
-          )
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: notesCtrl,
+            focusNode: notesFocus,
+            maxLines: 5,
+            decoration: InputDecoration(
+              labelText: 'Note',
+              hintText: 'Aggiungi annotazioni (opzionale)',
+              filled: true,
+              fillColor: cs.surface,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.outline.withAlpha(60))),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: dirty? cs.primary.withAlpha(160): cs.outline.withAlpha(70))),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.primary, width: 2)),
+            ),
+            onChanged: (v)=> bloc.add(EditNotes(v.isEmpty? null : v)),
+          ),
         ],
       ),
     );
   }
 }
 
+class _SimplePlaceholderCard extends StatelessWidget {
+  final String title; final String text;
+  const _SimplePlaceholderCard({required this.title, required this.text});
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(24,18,24,20),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 6, offset: const Offset(0,2))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Text(text, style: const TextStyle(color: Colors.black54)),
+        ],
+      ),
+    );
+  }
+}

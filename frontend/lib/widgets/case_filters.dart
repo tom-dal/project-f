@@ -41,9 +41,8 @@ class _CaseFiltersState extends State<CaseFilters> {
   DateTime? _deadlineTo;
   Timer? _debounce; // USER PREFERENCE: debounce search
   final LayerLink _statesLink = LayerLink();
-  OverlayEntry? _statesOverlay;
-  final ScrollController _statesScrollController = ScrollController();
-  List<CaseState> _draftStates = []; // temp selection before apply
+  OverlayEntry? _statesOverlay; // dropdown overlay
+  List<CaseState>? _statesDraft; // draft selection while dropdown open
 
   @override
   void initState() {
@@ -85,7 +84,6 @@ class _CaseFiltersState extends State<CaseFilters> {
   @override
   void dispose() {
     _removeStatesOverlay();
-    _statesScrollController.dispose();
     _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
@@ -142,7 +140,7 @@ class _CaseFiltersState extends State<CaseFilters> {
                 const SizedBox(width: 12),
                 _pillDate(label: 'Scadenza entro il', value: _deadlineTo, onTap: _pickToDate, radius: borderRadius),
                 const SizedBox(width: 12),
-                _statesPill(borderRadius),
+                _statesLabeled(radius: BorderRadius.circular(20)),
                 const SizedBox(width: 12),
                 // Ordinamento inline
                 _buildSortChips(),
@@ -210,7 +208,8 @@ class _CaseFiltersState extends State<CaseFilters> {
     final fromDate = InkWell(onTap: _pickFromDate, borderRadius: borderRadius, child: datePill('Da', _deadlineFrom));
     final toDate = InkWell(onTap: _pickToDate, borderRadius: borderRadius, child: datePill('A', _deadlineTo));
 
-    final stateChips = _buildStateChipsCompact(fieldHeight, borderRadius);
+    // Reuse dropdown overlay also in compact mode (requirement: single dropdown multi-select)
+    final stateDropdown = _statesLabeled(radius: BorderRadius.circular(16), compact: true);
     final sortChips = _buildSortChips(compact: true, height: fieldHeight);
 
     final reset = TextButton.icon(
@@ -237,65 +236,13 @@ class _CaseFiltersState extends State<CaseFilters> {
             const SizedBox(width: 8),
             Expanded(child: wrap(toDate)),
             const SizedBox(width: 8),
-            // State chips horizontally scrollable
-            Expanded(flex: 4, child: wrap(stateChips)),
+            Expanded(flex: 2, child: wrap(stateDropdown)),
             const SizedBox(width: 8),
             Expanded(flex: 2, child: wrap(sortChips)),
             const SizedBox(width: 8),
             wrap(reset),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildStateChipsCompact(double height, BorderRadius radius) {
-    final baseColor = const Color(0xFF2C3E8C);
-    return ScrollConfiguration(
-      behavior: const _NoGlowBehavior(),
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: CaseState.values.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 6),
-        itemBuilder: (ctx, i) {
-          final s = CaseState.values[i];
-          final active = _selectedStates.contains(s);
-          return GestureDetector(
-            onTap: () {
-              setState(() {
-                if (active) {
-                  _selectedStates.remove(s);
-                } else {
-                  _selectedStates.add(s);
-                }
-              });
-              widget.onStatesFilter(List.unmodifiable(_selectedStates));
-            },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 140),
-              width: 150, // fixed width for uniform size
-              height: height,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: active ? baseColor.withValues(alpha: 0.18) : baseColor.withValues(alpha: 0.07),
-                borderRadius: radius,
-                border: Border.all(color: active ? baseColor : baseColor.withOpacity(0.3), width: active ? 1 : 1),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                _getStateDisplayName(s),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 11.2,
-                  fontWeight: FontWeight.w600,
-                  color: baseColor,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          );
-        },
       ),
     );
   }
@@ -392,60 +339,6 @@ class _CaseFiltersState extends State<CaseFilters> {
     }
   }
 
-  String _getStateShort(CaseState s) {
-    switch (s) {
-      case CaseState.messaInMoraDaFare:
-        return 'Mora da fare';
-      case CaseState.messaInMoraInviata:
-        return 'Mora inviata';
-      case CaseState.contestazioneDaRiscontrare:
-        return 'Contest.';
-      case CaseState.depositoRicorso:
-        return 'Ricorso';
-      case CaseState.decretoIngiuntivoDaNotificare:
-        return 'Decr. da notif.';
-      case CaseState.decretoIngiuntivoNotificato:
-        return 'Decr. notif.';
-      case CaseState.precetto:
-        return 'Precetto';
-      case CaseState.pignoramento:
-        return 'Pignor.';
-      case CaseState.completata:
-        return 'Complet.';
-    }
-  }
-
-  // Removes the overlay for state selection if present
-  void _removeStatesOverlay() {
-    _statesOverlay?.remove();
-    _statesOverlay = null;
-  }
-
-  // Wraps a child widget in a pill-style container
-  Widget _pillContainer({required Widget child, double? width}) {
-    return Container(
-      width: width,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        color: Colors.white,
-        border: Border.all(color: const Color(0xFFE0E0E0)),
-      ),
-      child: child,
-    );
-  }
-
-  // Returns InputDecoration for pill-style fields
-  InputDecoration _pillDecoration(String label, BorderRadius radius) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: const TextStyle(fontSize: 13, color: Color(0xFF2C3E8C)),
-      border: OutlineInputBorder(borderRadius: radius, borderSide: BorderSide.none),
-      filled: true,
-      fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-    );
-  }
-
   // Renders a pill for date selection
   Widget _pillDate({required String label, required DateTime? value, required VoidCallback onTap, required BorderRadius radius}) {
     return InkWell(
@@ -472,109 +365,200 @@ class _CaseFiltersState extends State<CaseFilters> {
     );
   }
 
-  // Renders a pill for state selection, opens overlay on tap
-  Widget _statesPill(BorderRadius radius) {
-    final active = _selectedStates.isNotEmpty;
-    return CompositedTransformTarget(
-      link: _statesLink,
-      child: GestureDetector(
-        onTap: _showStatesOverlay,
-        child: Container(
-          decoration: BoxDecoration(
-            color: active ? const Color(0xFF2C3E8C).withOpacity(0.08) : Colors.white,
-            borderRadius: radius,
-            border: Border.all(color: active ? const Color(0xFF2C3E8C) : const Color(0xFFE0E0E0)),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.filter_alt, size: 16, color: Color(0xFF2C3E8C)),
-              const SizedBox(width: 6),
-              Text(
-                active ? _selectedStates.map(_getStateShort).join(', ') : 'Stato',
-                style: TextStyle(fontSize: 12, color: const Color(0xFF2C3E8C)),
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(width: 4),
-              const Icon(Icons.arrow_drop_down, size: 18, color: Color(0xFF2C3E8C)),
-            ],
-          ),
-        ),
-      ),
+  // Wrapper with left label 'Stati'
+  Widget _statesLabeled({required BorderRadius radius, bool compact = false}) {
+    final labelStyle = TextStyle(fontSize: compact ? 11 : 12, fontWeight: FontWeight.w600, color: const Color(0xFF2C3E8C));
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('Stati', style: labelStyle),
+        const SizedBox(width: 6),
+        _statesPill(radius, compact: compact),
+      ],
     );
   }
 
-  // Shows overlay for state selection
-  void _showStatesOverlay() {
-    _removeStatesOverlay();
-    final overlay = Overlay.of(context);
-    if (overlay == null) return;
-    _draftStates = List.from(_selectedStates);
-    _statesOverlay = OverlayEntry(
-      builder: (context) {
-        return Positioned(
-          width: 260,
-          child: CompositedTransformFollower(
-            link: _statesLink,
-            showWhenUnlinked: false,
-            offset: const Offset(0, 48),
-            child: Material(
-              elevation: 6,
-              borderRadius: BorderRadius.circular(16),
+  // Renders a pill for state selection, opens overlay on tap
+  Widget _statesPill(BorderRadius radius, {bool compact = false}) {
+    final active = _selectedStates.isNotEmpty;
+    final label = _statesPillLabel();
+    final height = compact ? 36.0 : 40.0; // reduced height
+    final width = compact ? 150.0 : 180.0; // reduced width
+    return CompositedTransformTarget(
+      link: _statesLink,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: _toggleStatesOverlay,
+          child: Tooltip(
+            message: label,
+            waitDuration: const Duration(milliseconds: 400),
+            child: SizedBox(
+              height: height,
+              width: width,
               child: Container(
-                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFE0E0E0)),
+                  color: active ? const Color(0xFF2C3E8C).withAlpha((0.08*255).round()) : Colors.white,
+                  borderRadius: radius,
+                  border: Border.all(color: active ? const Color(0xFF2C3E8C) : const Color(0xFFE0E0E0)),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                child: Stack(
                   children: [
-                    ...CaseState.values.map((s) => CheckboxListTile(
-                      value: _draftStates.contains(s),
-                      title: Text(_getStateDisplayName(s), style: const TextStyle(fontSize: 13)),
-                      onChanged: (checked) {
-                        setState(() {
-                          if (checked == true) {
-                            _draftStates.add(s);
-                          } else {
-                            _draftStates.remove(s);
-                          }
-                        });
-                      },
-                    )),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(
-                          onPressed: () {
-                            setState(() {
-                              _selectedStates = List.from(_draftStates);
-                            });
-                            widget.onStatesFilter(List.unmodifiable(_selectedStates));
-                            _removeStatesOverlay();
-                          },
-                          child: const Text('Applica'),
+                    Positioned.fill(
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 14, right: 30),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            label.isEmpty ? ' ' : label,
+                            style: TextStyle(fontSize: compact ? 12 : 12, color: const Color(0xFF2C3E8C), fontWeight: FontWeight.w600),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
                         ),
-                        TextButton(
-                          onPressed: () {
-                            _removeStatesOverlay();
-                          },
-                          child: const Text('Annulla'),
-                        ),
-                      ],
+                      ),
+                    ),
+                    Positioned(
+                      right: 2,
+                      top: 0,
+                      bottom: 0,
+                      child: Icon(Icons.arrow_drop_down, size: compact ? 22 : 24, color: const Color(0xFF2C3E8C)),
                     ),
                   ],
                 ),
               ),
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
+  }
+
+  String _statesPillLabel(){
+    if(_selectedStates.isEmpty) return 'Tutti';
+    if(_selectedStates.length == 1) return _getStateDisplayName(_selectedStates.first);
+    return '${_selectedStates.length} stati';
+  }
+
+  void _toggleStatesOverlay(){
+    if(_statesOverlay != null){
+      _removeStatesOverlay();
+    } else {
+      _showStatesOverlay();
+    }
+  }
+
+  void _removeStatesOverlay(){
+    // Commit draft if present
+    if(_statesDraft != null){
+      final committed = List<CaseState>.from(_statesDraft!);
+      setState(()=> _selectedStates = committed);
+      widget.onStatesFilter(List.unmodifiable(_selectedStates));
+      _statesDraft = null;
+    }
+    _statesOverlay?.remove();
+    _statesOverlay = null;
+  }
+
+  void _showStatesOverlay(){
+    final overlay = Overlay.of(context);
+    _statesDraft = List<CaseState>.from(_selectedStates); // initialize draft
+    _statesOverlay = OverlayEntry(builder: (ctx){
+      return Stack(children:[
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: _removeStatesOverlay,
+            child: const SizedBox.shrink(),
+          ),
+        ),
+        Positioned(
+          width: 300,
+          child: CompositedTransformFollower(
+            link: _statesLink,
+            showWhenUnlinked: false,
+            offset: const Offset(0, 44), // adjusted for reduced height
+            child: Material(
+              elevation: 6,
+              borderRadius: BorderRadius.circular(12),
+              child: StatefulBuilder(
+                builder: (ctx, setInner){
+                  return ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 420),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE0E0E0)),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal:12, vertical:10),
+                            alignment: Alignment.centerLeft,
+                            child: Text('Stati (${_statesDraft!.length})', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF2C3E8C))),
+                          ),
+                          const Divider(height:1),
+                          Expanded(
+                            child: Scrollbar(
+                              child: ListView(
+                                padding: EdgeInsets.zero,
+                                children: [
+                                  ...CaseState.values.map((s){
+                                    final checked = _statesDraft!.contains(s);
+                                    return CheckboxListTile(
+                                      dense: true,
+                                      value: checked,
+                                      controlAffinity: ListTileControlAffinity.leading,
+                                      title: Text(_getStateDisplayName(s), style: const TextStyle(fontSize: 13)),
+                                      onChanged: (val){
+                                        _toggleStateDraftSelection(s);
+                                        setInner((){});
+                                      },
+                                    );
+                                  }),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const Divider(height:1),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal:8, vertical:6),
+                            child: Row(
+                              children: [
+                                TextButton(
+                                  onPressed: _statesDraft!.isEmpty?null:(){
+                                    _statesDraft!.clear();
+                                    setInner((){});
+                                  },
+                                  child: const Text('Deseleziona tutto'),
+                                ),
+                                const Spacer(),
+                              ],
+                            ),
+                          )
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ]);
+    });
     overlay.insert(_statesOverlay!);
+  }
+
+  void _toggleStateDraftSelection(CaseState s){
+    if(_statesDraft == null) return;
+    if(_statesDraft!.contains(s)){
+      _statesDraft!.remove(s);
+    } else {
+      _statesDraft!.add(s);
+    }
   }
 
   // Handler for picking the 'from' date
@@ -612,15 +596,35 @@ class _CaseFiltersState extends State<CaseFilters> {
       _selectedStates.clear();
       _deadlineFrom = null;
       _deadlineTo = null;
+      _statesDraft = null; // reset draft too
     });
     widget.onSearchFilter('');
     widget.onStatesFilter([]);
     widget.onDeadlineRange(null, null);
   }
-}
 
-class _NoGlowBehavior extends ScrollBehavior {
-  const _NoGlowBehavior();
-  @override
-  Widget buildViewportChrome(BuildContext context, Widget child, AxisDirection axisDirection) => child;
+  // Helper for pill-style container
+  Widget _pillContainer({required Widget child, double? width}) {
+    return Container(
+      width: width,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        color: Colors.white,
+        border: Border.all(color: const Color(0xFFE0E0E0)),
+      ),
+      child: child,
+    );
+  }
+
+  // Helper for pill-style input decoration
+  InputDecoration _pillDecoration(String label, BorderRadius radius) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(fontSize: 13, color: Color(0xFF2C3E8C)),
+      border: OutlineInputBorder(borderRadius: radius, borderSide: BorderSide.none),
+      filled: true,
+      fillColor: Colors.white,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    );
+  }
 }

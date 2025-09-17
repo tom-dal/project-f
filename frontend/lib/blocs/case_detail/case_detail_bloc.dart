@@ -60,6 +60,8 @@ class RegisterCasePayment extends CaseDetailEvent {
   List<Object?> get props => [amount, paymentDate];
 }
 
+class ResetCaseEdits extends CaseDetailEvent {}
+
 // STATES
 abstract class CaseDetailState extends Equatable {
   @override
@@ -159,6 +161,7 @@ class CaseDetailBloc extends Bloc<CaseDetailEvent, CaseDetailState> {
     on<DeleteInstallmentPlanEvent>(_onDeletePlan);
     on<DeleteCaseEvent>(_onDeleteCase);
     on<RegisterCasePayment>(_onRegisterPayment);
+    on<ResetCaseEdits>(_onResetCaseEdits);
   }
 
   Future<void> _onLoad(LoadCaseDetail e, Emitter<CaseDetailState> emit) async {
@@ -201,6 +204,7 @@ class CaseDetailBloc extends Bloc<CaseDetailEvent, CaseDetailState> {
       newDeadline != s.caseData.nextDeadlineDate ||
       (newNotes ?? '') != (s.caseData.notes ?? '') ||
       newNegotiations != (s.caseData.ongoingNegotiations ?? false);
+    print('[DEBUG] Edit field: dirty=$dirty, debtor=$newDebtor, owed=$newOwed, state=$newState, deadline=$newDeadline, notes=$newNotes, negotiations=$newNegotiations');
     emit(s.copyWith(
       debtorName: newDebtor,
       owedAmount: newOwed,
@@ -215,6 +219,7 @@ class CaseDetailBloc extends Bloc<CaseDetailEvent, CaseDetailState> {
   Future<void> _onSaveCase(SaveCaseEdits e, Emitter<CaseDetailState> emit) async {
     final s = state;
     if (s is! CaseDetailLoaded) return;
+    print('[DEBUG] SaveCaseEdits received. dirty=${s.dirty}');
     emit(s.copyWith(saving: true, error: null));
     try {
       final bool notesChanged = s.notes != s.caseData.notes;
@@ -230,6 +235,7 @@ class CaseDetailBloc extends Bloc<CaseDetailEvent, CaseDetailState> {
         clearNotes: clearingNotes ? true : null,
       );
       final map = <String, Installment>{ for (final inst in (updated.installments ?? [])) inst.id : inst };
+      print('[DEBUG] SaveCaseEdits success.');
       emit(CaseDetailLoaded(
         caseData: updated,
         debtorName: updated.debtorName,
@@ -246,6 +252,7 @@ class CaseDetailBloc extends Bloc<CaseDetailEvent, CaseDetailState> {
         successMessage: 'Modifiche salvate',
       ));
     } catch (ex) {
+      print('[DEBUG] SaveCaseEdits error: $ex');
       emit(s.copyWith(saving:false,error: ex.toString()));
     }
   }
@@ -371,5 +378,20 @@ class CaseDetailBloc extends Bloc<CaseDetailEvent, CaseDetailState> {
     } catch (ex) {
       emit(s.copyWith(saving: false, error: ex.toString(), successMessage: null));
     }
+  }
+
+  void _onResetCaseEdits(ResetCaseEdits e, Emitter<CaseDetailState> emit){
+    final s = state; if (s is! CaseDetailLoaded) return; if(s.saving) return;
+    emit(s.copyWith(
+      debtorName: s.caseData.debtorName,
+      owedAmount: s.caseData.owedAmount,
+      state: s.caseData.state,
+      nextDeadline: s.caseData.nextDeadlineDate,
+      notes: s.caseData.notes,
+      ongoingNegotiations: s.caseData.ongoingNegotiations ?? false,
+      dirty: false,
+      error: null,
+      successMessage: null,
+    ));
   }
 }

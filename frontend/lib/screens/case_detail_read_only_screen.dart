@@ -75,49 +75,37 @@ class _CaseDetailReadOnlyViewState extends State<_CaseDetailReadOnlyView> {
           appBar: AppBar(
             title: Text('Pratica ${s.caseData.id.substring(0, 6)}'),
             actions: [
-              TextButton.icon(
+              TextButton(
                 onPressed: () => _openEdit(context, s),
-                icon: const Icon(Icons.edit, size: 18),
-                label: const Text('Modifica'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.edit_outlined, size: 20),
+                    SizedBox(width: 6),
+                    Text('Modifica'),
+                  ],
+                ),
               ),
             ],
           ),
           body: LayoutBuilder(
             builder: (ctx, constraints) {
-              final wide = constraints.maxWidth > 780;
+              final wide = constraints.maxWidth > 980; // threshold for two column
               return SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 24),
+                padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 20),
                 child: Center(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1100),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _HeaderSection(s: s, onRegisterPayment: _openRegisterPaymentDialog),
-                        const SizedBox(height: 32),
-                        _SectionTitle('Dati pratica'),
-                        const SizedBox(height: 8),
-                        _FieldsGrid(s: s, twoColumns: wide),
-                        const SizedBox(height: 32),
-                        _SectionTitle('Note'),
-                        const SizedBox(height: 8),
-                        _NotesSection(notes: s.notes),
-                        const SizedBox(height: 32),
-                        _SectionTitle('Rateizzazione'),
-                        const SizedBox(height: 8),
-                        _InstallmentsPreview(s: s),
-                        const SizedBox(height: 32),
-                      ],
-                    ),
+                    constraints: const BoxConstraints(maxWidth: 1300),
+                    child: wide
+                      ? _TwoColumnBody(state: s, openRegisterPayment: _openRegisterPaymentDialog, openEdit: ()=>_openEdit(context, s))
+                      : _SingleColumnBody(state: s, openRegisterPayment: _openRegisterPaymentDialog, openEdit: ()=>_openEdit(context, s)),
                   ),
                 ),
               );
             },
-          ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => _openEdit(context, s),
-            icon: const Icon(Icons.edit),
-            label: const Text('Modifica'),
           ),
         );
       },
@@ -245,24 +233,121 @@ class _CaseDetailReadOnlyViewState extends State<_CaseDetailReadOnlyView> {
   }
 }
 
+class _TwoColumnBody extends StatelessWidget {
+  final CaseDetailLoaded state;
+  final void Function(CaseDetailLoaded) openRegisterPayment;
+  final VoidCallback openEdit;
+  const _TwoColumnBody({required this.state, required this.openRegisterPayment, required this.openEdit});
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // LEFT
+        Expanded(
+          flex: 3,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _HeaderSection(s: state),
+              const SizedBox(height: 28),
+              _LeftSectionCard(
+                title: 'Dati pratica',
+                child: _FieldsGrid(s: state, twoColumns: true),
+              ),
+              const SizedBox(height: 28),
+              _LeftSectionCard(
+                title: 'Note',
+                child: _NotesSection(notes: state.notes),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 32),
+        // RIGHT
+        Expanded(
+          flex: 2,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _PaymentsSection(s: state, onRegisterPayment: openRegisterPayment),
+              const SizedBox(height: 28),
+              _InstallmentsSideCard(s: state, openEdit: openEdit),
+            ],
+          ),
+        )
+      ],
+    );
+  }
+}
+
+class _SingleColumnBody extends StatelessWidget {
+  final CaseDetailLoaded state;
+  final void Function(CaseDetailLoaded) openRegisterPayment;
+  final VoidCallback openEdit;
+  const _SingleColumnBody({required this.state, required this.openRegisterPayment, required this.openEdit});
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _HeaderSection(s: state),
+        const SizedBox(height: 24),
+        _PaymentsSection(s: state, onRegisterPayment: openRegisterPayment),
+        const SizedBox(height: 24),
+        _InstallmentsSideCard(s: state, openEdit: openEdit),
+        const SizedBox(height: 24),
+        _LeftSectionCard(title: 'Dati pratica', child: _FieldsGrid(s: state, twoColumns: false)),
+        const SizedBox(height: 24),
+        _LeftSectionCard(title: 'Note', child: _NotesSection(notes: state.notes)),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+}
+
+class _LeftSectionCard extends StatelessWidget {
+  final String title; final Widget child;
+  const _LeftSectionCard({required this.title, required this.child});
+  @override
+  Widget build(BuildContext context) {
+    final base = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+      decoration: BoxDecoration(
+        color: base.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 6, offset: const Offset(0,2))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 16),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
 class _HeaderSection extends StatelessWidget {
   final CaseDetailLoaded s;
-  final void Function(CaseDetailLoaded) onRegisterPayment;
-  const _HeaderSection({required this.s, required this.onRegisterPayment});
+  const _HeaderSection({required this.s});
   @override
   Widget build(BuildContext context) {
     final fmtCurrency = NumberFormat('#,##0.00', 'it_IT');
     final base = Theme.of(context).colorScheme;
     final residuo = s.caseData.remainingAmount ?? (s.owedAmount - (s.caseData.totalPaidAmount ?? 0));
-    final showRegisterPayment = (s.caseData.hasInstallmentPlan != true) && residuo > 0.0;
     final hasPayments = (s.caseData.totalPaidAmount ?? 0) > 0.0;
     final isCompletata = s.state == CaseState.completata;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 18),
       decoration: BoxDecoration(
         color: base.surface,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: const Offset(0,2))],
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: const Offset(0,2))],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -272,7 +357,7 @@ class _HeaderSection extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(s.debtorName, style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
+                Text(s.debtorName, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 Row(
                   children: [
@@ -283,50 +368,175 @@ class _HeaderSection extends StatelessWidget {
                     ],
                   ],
                 ),
-                const SizedBox(height: 16),
-                Row(
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 40,
+                  runSpacing: 8,
                   children: [
-                    Text('Importo:', style: Theme.of(context).textTheme.labelLarge),
-                    const SizedBox(width: 4),
-                    Text('€ ${fmtCurrency.format(s.owedAmount)}', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: base.primary)),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Importo dovuto', style: Theme.of(context).textTheme.labelMedium),
+                        const SizedBox(height:4),
+                        Text('€ ${fmtCurrency.format(s.owedAmount)}', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: base.primary)),
+                      ],
+                    ),
+                    if (!isCompletata && hasPayments) Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Debito residuo', style: Theme.of(context).textTheme.labelMedium),
+                        const SizedBox(height:4),
+                        Text('€ ${fmtCurrency.format(residuo)}', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: base.primary)),
+                      ],
+                    ),
                   ],
                 ),
-                if (!isCompletata && hasPayments) ...[
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Text('Residuo:', style: Theme.of(context).textTheme.labelLarge),
-                      const SizedBox(width: 4),
-                      Text('€ ${fmtCurrency.format(residuo)}', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: base.primary)),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Text('Scadenza:', style: Theme.of(context).textTheme.labelLarge),
-                    const SizedBox(width: 4),
-                    Text(s.nextDeadline != null ? _fmtDate(s.nextDeadline!) : '-', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: base.primary)),
-                  ],
-                ),
-                if (showRegisterPayment) ...[
-                  const SizedBox(height: 16),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.payments_outlined),
-                    label: const Text('Registra pagamento'),
-                    onPressed: () => onRegisterPayment(s),
-                  ),
-                  const SizedBox(height: 8),
-                  Text('Residuo: € ${fmtCurrency.format(residuo)}', style: Theme.of(context).textTheme.bodyMedium),
-                ],
               ],
             ),
+          ),
+          const SizedBox(width: 32),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Prossima scadenza', style: Theme.of(context).textTheme.labelMedium),
+              const SizedBox(height:4),
+              Text(s.nextDeadline != null ? _fmtDate(s.nextDeadline!) : '-', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: base.primary)),
+            ],
           ),
         ],
       ),
     );
   }
   String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+}
+
+class _PaymentsSection extends StatelessWidget {
+  final CaseDetailLoaded s;
+  final void Function(CaseDetailLoaded) onRegisterPayment;
+  const _PaymentsSection({required this.s, required this.onRegisterPayment});
+  @override
+  Widget build(BuildContext context) {
+    final base = Theme.of(context).colorScheme;
+    final payments = _extractPayments();
+    final fmt = NumberFormat('#,##0.00', 'it_IT');
+    final residuo = s.caseData.remainingAmount ?? (s.owedAmount - (s.caseData.totalPaidAmount ?? 0));
+    final canRegister = (s.caseData.hasInstallmentPlan != true) && residuo > 0.0 && s.state != CaseState.completata;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+      decoration: BoxDecoration(
+        color: base.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 6, offset: const Offset(0,2))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text('Pagamenti', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600))),
+              if (canRegister) OutlinedButton.icon(
+                icon: const Icon(Icons.payments_outlined, size: 18),
+                label: const Text('Registra pagamento'),
+
+                onPressed: ()=>onRegisterPayment(s),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (payments.isEmpty) const Text('Nessun pagamento registrato', style: TextStyle(color: Colors.black54))
+          else Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  if (s.caseData.totalPaidAmount!=null) Text('Totale pagato: € ${fmt.format(s.caseData.totalPaidAmount!)}', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  if (residuo>0) Text('Residuo: € ${fmt.format(residuo)}', style: Theme.of(context).textTheme.bodyMedium),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _PaymentsTable(payments: payments),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<_PaymentRow> _extractPayments(){
+    final list = <_PaymentRow>[];
+    final raw = s.caseData.payments;
+    if (raw==null) return list;
+    for (final p in raw) {
+      try {
+        if (p is Map) {
+          final amountRaw = p['amount'];
+            double? amount;
+            if (amountRaw is num) amount = amountRaw.toDouble();
+            else if (amountRaw is String) amount = double.tryParse(amountRaw.replaceAll(',', '.'));
+          final dateRaw = p['paymentDate'];
+          DateTime? date;
+          if (dateRaw is String && dateRaw.isNotEmpty) {
+            try { date = DateTime.parse(dateRaw.length==10 && !dateRaw.contains('T') ? dateRaw : dateRaw); } catch(_) {}
+          }
+          if (amount!=null && date!=null) {
+            list.add(_PaymentRow(amount: amount, date: date));
+          } else {
+            list.add(_PaymentRow(amount: amount ?? 0.0, date: date ?? DateTime.fromMillisecondsSinceEpoch(0), invalid: true));
+          }
+        }
+      } catch(_) {
+        list.add(_PaymentRow(amount: 0.0, date: DateTime.fromMillisecondsSinceEpoch(0), invalid: true));
+      }
+    }
+    list.sort((a,b)=> b.date.compareTo(a.date));
+    return list;
+  }
+}
+
+class _PaymentRow { final double amount; final DateTime date; final bool invalid; _PaymentRow({required this.amount, required this.date, this.invalid=false}); }
+
+class _PaymentsTable extends StatelessWidget {
+  final List<_PaymentRow> payments;
+  const _PaymentsTable({required this.payments});
+  @override
+  Widget build(BuildContext context) {
+    final fmt = DateFormat('dd/MM/yyyy'); // FIX: was NumberFormat causing isNegative on DateTime
+    final fmtAmount = NumberFormat('#,##0.00', 'it_IT');
+    final maxRowsNoScroll = 6;
+    final rows = payments.mapIndexed((index, p){
+      final idx = payments.length - index; // descending numbering
+      return DataRow(cells: [
+        DataCell(Text(idx.toString())),
+        DataCell(Text(p.invalid? '?' : '€ ${fmtAmount.format(p.amount)}')),
+        DataCell(Text(p.invalid? '?' : fmt.format(p.date))),
+      ]);
+    }).toList();
+    final table = DataTable(
+      columns: const [
+        DataColumn(label: Text('#')),
+        DataColumn(label: Text('Importo')),
+        DataColumn(label: Text('Data')),
+      ],
+      rows: rows,
+      headingRowHeight: 36,
+      dataRowMinHeight: 40,
+      dataRowMaxHeight: 48,
+    );
+    if (payments.length <= maxRowsNoScroll) return table;
+    final height = 48 * maxRowsNoScroll + 40; // approximate header + rows
+    return SizedBox(
+      height: height.toDouble(),
+      child: SingleChildScrollView(
+        child: table,
+      ),
+    );
+  }
+}
+
+extension<E> on Iterable<E> {
+  List<T> mapIndexed<T>(T Function(int index, E e) toElement){
+    var i=0; final out=<T>[]; for(final e in this){ out.add(toElement(i,e)); i++; } return out; }
 }
 
 class _NegotiationChip extends StatelessWidget {
@@ -370,6 +580,7 @@ class _FieldsGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final fmtCurrency = NumberFormat('#,##0.00', 'it_IT');
     final fields = [
+      _FieldData(label: 'Importo dovuto', value: '€ ${fmtCurrency.format(s.owedAmount)}'),
       _FieldData(label: 'Ultima modifica stato', value: _fmtDate(s.caseData.lastStateDate)),
       if (s.caseData.createdDate != null) _FieldData(label: 'Creata il', value: _fmtDate(s.caseData.createdDate!)),
       if (s.caseData.lastModifiedDate != null) _FieldData(label: 'Aggiornata il', value: _fmtDate(s.caseData.lastModifiedDate!)),
@@ -381,31 +592,21 @@ class _FieldsGrid extends StatelessWidget {
     ];
     final children = fields.map((f) => _FieldTile(data: f)).toList();
     if (twoColumns) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Wrap(
-          spacing: 32,
-          runSpacing: 20,
-          children: children.map((w) => SizedBox(width: 320, child: w)).toList(),
-        ),
+      return Wrap(
+        spacing: 40,
+        runSpacing: 12,
+        children: children.map((w) => SizedBox(width: 300, child: w)).toList(),
       );
     } else {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          children: [for (final w in children) Padding(padding: const EdgeInsets.only(bottom: 20), child: w)],
-        ),
+      return Column(
+        children: [for (final w in children) Padding(padding: const EdgeInsets.only(bottom: 12), child: w)],
       );
     }
   }
   String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
 }
 
-class _FieldData {
-  final String label;
-  final String value;
-  _FieldData({required this.label, required this.value});
-}
+class _FieldData { final String label; final String value; _FieldData({required this.label, required this.value}); }
 
 class _FieldTile extends StatelessWidget {
   final _FieldData data;
@@ -416,8 +617,8 @@ class _FieldTile extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(data.label, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: base.secondary)),
-        const SizedBox(height: 4),
+        Text(data.label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: base.secondary)),
+        const SizedBox(height: 2),
         Text(data.value, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500)),
       ],
     );
@@ -432,7 +633,7 @@ class _NotesSection extends StatelessWidget {
     final base = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: base.surface,
         borderRadius: BorderRadius.circular(8),
@@ -450,27 +651,17 @@ class _StateChip extends StatelessWidget {
   const _StateChip({required this.state});
   @override
   Widget build(BuildContext context) {
-    Color color = Colors.grey;
-    String label = 'Sconosciuto';
+    Color color = Colors.grey; String label = 'Sconosciuto';
     switch (state) {
-      case CaseState.messaInMoraDaFare:
-        color = Colors.grey; label = 'Messa in Mora da Fare'; break;
-      case CaseState.messaInMoraInviata:
-        color = Colors.red; label = 'Messa in Mora Inviata'; break;
-      case CaseState.contestazioneDaRiscontrare:
-        color = Colors.orange; label = 'Contestazione da Riscontrare'; break;
-      case CaseState.depositoRicorso:
-        color = Colors.amber; label = 'Deposito Ricorso'; break;
-      case CaseState.decretoIngiuntivoDaNotificare:
-        color = Colors.green; label = 'DI da Notificare'; break;
-      case CaseState.decretoIngiuntivoNotificato:
-        color = Colors.teal; label = 'DI Notificato'; break;
-      case CaseState.precetto:
-        color = Colors.blue; label = 'Precetto'; break;
-      case CaseState.pignoramento:
-        color = Colors.purple; label = 'Pignoramento'; break;
-      case CaseState.completata:
-        color = Colors.green; label = 'Completata'; break;
+      case CaseState.messaInMoraDaFare: color = Colors.grey; label = 'Messa in Mora da Fare'; break;
+      case CaseState.messaInMoraInviata: color = Colors.red; label = 'Messa in Mora Inviata'; break;
+      case CaseState.contestazioneDaRiscontrare: color = Colors.orange; label = 'Contestazione da Riscontrare'; break;
+      case CaseState.depositoRicorso: color = Colors.amber; label = 'Deposito Ricorso'; break;
+      case CaseState.decretoIngiuntivoDaNotificare: color = Colors.green; label = 'DI da Notificare'; break;
+      case CaseState.decretoIngiuntivoNotificato: color = Colors.teal; label = 'DI Notificato'; break;
+      case CaseState.precetto: color = Colors.blue; label = 'Precetto'; break;
+      case CaseState.pignoramento: color = Colors.purple; label = 'Pignoramento'; break;
+      case CaseState.completata: color = Colors.green; label = 'Completata'; break;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -484,73 +675,71 @@ class _StateChip extends StatelessWidget {
   }
 }
 
-class _InstallmentsPreview extends StatelessWidget {
-  final CaseDetailLoaded s;
-  const _InstallmentsPreview({required this.s});
+class _InstallmentsSideCard extends StatelessWidget {
+  final CaseDetailLoaded s; final VoidCallback openEdit;
+  const _InstallmentsSideCard({required this.s, required this.openEdit});
   @override
   Widget build(BuildContext context) {
     final base = Theme.of(context).colorScheme;
     if (s.caseData.hasInstallmentPlan != true) {
       return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
         decoration: BoxDecoration(
           color: base.surface,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: base.outline.withAlpha((0.08 * 255).round())),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 6, offset: const Offset(0,2))],
         ),
-        child: const Text('Nessun piano rate presente'),
+        child: Text('Nessun piano rate', style: Theme.of(context).textTheme.labelLarge)
       );
     }
     final list = s.localInstallments.values.toList()..sort((a,b)=>a.dueDate.compareTo(b.dueDate));
     final fmt = DateFormat('dd/MM/yyyy');
+    final maxRows = 8;
+    final rows = list.map((i) => DataRow(cells: [
+      DataCell(Text(i.installmentNumber.toString())),
+      DataCell(Text('€ ${i.amount.toStringAsFixed(2).replaceAll('.', ',')}')),
+      DataCell(Text(fmt.format(i.dueDate))),
+      DataCell(Text(i.paid==true? 'Pagata' : 'Da pagare', style: TextStyle(color: i.paid==true? Colors.green : Colors.orange))),
+    ])).toList();
+    final table = DataTable(
+      columns: const [
+        DataColumn(label: Text('#')),
+        DataColumn(label: Text('Importo')),
+        DataColumn(label: Text('Scadenza')),
+        DataColumn(label: Text('Stato')),
+      ],
+      rows: rows,
+      headingRowHeight: 34,
+      dataRowMinHeight: 38,
+      dataRowMaxHeight: 46,
+    );
+    Widget tableWidget;
+    if (list.length > maxRows) {
+      tableWidget = SizedBox(
+        height: 46 * maxRows + 40,
+        child: SingleChildScrollView(child: table),
+      );
+    } else {
+      tableWidget = table;
+    }
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
       decoration: BoxDecoration(
         color: base.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: base.outline.withAlpha((0.08 * 255).round())),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0,2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Rate (${list.length})', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 12),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              columns: const [
-                DataColumn(label: Text('#')),
-                DataColumn(label: Text('Importo')),
-                DataColumn(label: Text('Scadenza')),
-                DataColumn(label: Text('Stato')),
-              ],
-              rows: list.map((i) => DataRow(cells: [
-                DataCell(Text(i.installmentNumber.toString())),
-                DataCell(Text('€ ${i.amount.toStringAsFixed(2).replaceAll('.', ',')}')),
-                DataCell(Text(fmt.format(i.dueDate))),
-                DataCell(Text(i.paid==true? 'Pagata' : 'Da pagare', style: TextStyle(color: i.paid==true? Colors.green : Colors.orange))),
-              ])).toList(),
-            ),
+          Row(
+            children: [
+              Expanded(child: Text('Rate (${list.length})', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600))),
+            ],
           ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: () => _goToEdit(context),
-              icon: const Icon(Icons.edit_note),
-              label: const Text('Modifica rate'),
-            ),
-          )
+          const SizedBox(height: 10),
+            tableWidget,
         ],
-      ),
-    );
-  }
-  void _goToEdit(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => CaseDetailEditScreen(caseId: s.caseData.id, initialCase: s.caseData),
       ),
     );
   }

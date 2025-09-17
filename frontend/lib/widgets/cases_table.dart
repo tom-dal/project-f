@@ -24,14 +24,8 @@ class CasesTableHeader extends StatelessWidget {
           _hCell('DEBITORE', flex: 3, style: style),
           _hCell('STATO', flex: 2, style: style),
           _hCell('ULTIMA ATTIVITÀ', flex: 2, style: style),
-            _hCell('SCADENZA', flex: 2, style: style),
-          SizedBox(
-            width: CasesTableLayout.actionsWidth,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Align(alignment: Alignment.center, child: Text('', style: style)),
-            ),
-          ),
+          _hCell('SCADENZA', flex: 2, style: style),
+          _hCell('RATEIZZAZIONE', flex: 1, style: style), // new column
         ],
       ),
     );
@@ -93,13 +87,12 @@ class _CasesTableDataRowState extends State<CasesTableDataRow> {
                     ),
                   ),
                 ),
-                SizedBox(
-                  width: CasesTableLayout.actionsWidth,
-                  child: IconButton(
-                    tooltip: 'Apri dettaglio',
-                    icon: const Icon(Icons.open_in_new, size: 18, color: Colors.blue),
-                    onPressed: widget.onTap,
-                    splashRadius: 18,
+                _cell(
+                  flex: 1,
+                  child: Center(
+                    child: (c.hasInstallmentPlan ?? false)
+                        ? const Icon(Icons.check, size: 18, color: Colors.green)
+                        : const SizedBox.shrink(),
                   ),
                 ),
               ],
