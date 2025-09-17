@@ -20,3 +20,28 @@ enum CaseState {
   @JsonValue('COMPLETATA')
   completata,
 }
+
+extension CaseStateLabel on CaseState {
+  String get label {
+    switch (this) {
+      case CaseState.messaInMoraDaFare:
+        return 'Messa in Mora da Fare';
+      case CaseState.messaInMoraInviata:
+        return 'Messa in Mora Inviata';
+      case CaseState.contestazioneDaRiscontrare:
+        return 'Contestazione da Riscontrare';
+      case CaseState.depositoRicorso:
+        return 'Deposito Ricorso';
+      case CaseState.decretoIngiuntivoDaNotificare:
+        return 'DI da Notificare';
+      case CaseState.decretoIngiuntivoNotificato:
+        return 'DI Notificato';
+      case CaseState.precetto:
+        return 'Precetto';
+      case CaseState.pignoramento:
+        return 'Pignoramento';
+      case CaseState.completata:
+        return 'Completata';
+    }
+  }
+}

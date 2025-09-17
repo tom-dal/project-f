@@ -336,8 +336,7 @@ class _EditableFieldsCard extends StatelessWidget {
               // sostituito value (deprecato) con initialValue
               initialValue: s.state,
               items: CaseState.values
-                  .map(
-                      (st) => DropdownMenuItem(value: st, child: Text(st.name)))
+                  .map((st) => DropdownMenuItem(value: st, child: Text(st.label)))
                   .toList(),
               onChanged: (v) {
                 if (v != null) bloc.add(EditState(v));
