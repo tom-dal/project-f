@@ -337,7 +337,6 @@ public class DebtCaseService {
         // Update installment as paid
         installment.setPaid(true);
         installment.setPaidDate(paymentDate != null ? paymentDate : LocalDateTime.now());
-        installment.setPaidAmount(amount);
         installment.setLastModifiedDate(LocalDateTime.now());
         installment.setLastModifiedBy("system"); // TODO: get from security context
 
@@ -693,7 +692,6 @@ public class DebtCaseService {
                     .filter(i -> payment.getInstallmentId().equals(i.getInstallmentId()))
                     .findFirst()
                     .ifPresent(inst -> {
-                        if (amount != null) inst.setPaidAmount(amount);
                         if (paymentDate != null) inst.setPaidDate(paymentDate.atStartOfDay());
                         inst.setLastModifiedDate(LocalDateTime.now());
                     });
@@ -732,7 +730,6 @@ public class DebtCaseService {
                     .findFirst()
                     .ifPresent(inst -> {
                         inst.setPaid(false);
-                        inst.setPaidAmount(null);
                         inst.setPaidDate(null);
                         inst.setLastModifiedDate(LocalDateTime.now());
                     });

@@ -4,10 +4,12 @@ import com.debtcollection.model.DebtCase;
 import com.debtcollection.model.Installment;
 import com.debtcollection.exception.BusinessValidationException;
 import com.debtcollection.exception.ValidationErrorCodes;
+import com.debtcollection.model.Payment;
 import org.springframework.data.mongodb.core.mapping.event.AbstractMongoEventListener;
 import org.springframework.data.mongodb.core.mapping.event.BeforeConvertEvent;
 import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
+import java.util.Objects;
 
 /**
  * MongoDB Event Listener per DebtCase
@@ -107,10 +109,9 @@ public class DebtCaseValidator extends AbstractMongoEventListener<DebtCase> {
         if (debtCase.getInstallments() != null && !debtCase.getInstallments().isEmpty()) {
             for (int i = 0; i < debtCase.getInstallments().size(); i++) {
                 Installment installment = debtCase.getInstallments().get(i);
-                
+
                 if (Boolean.TRUE.equals(installment.getPaid())) {
-                    // If installment is marked as paid, check if it has payment information
-                    if (installment.getPaidAmount() == null) {
+                    if (installment.getPaid() && debtCase.getPayments().stream().map(Payment::getInstallmentId).noneMatch(id -> installment.getInstallmentId().equals(id))) {
                         throw new BusinessValidationException(
                             ValidationErrorCodes.INSTALLMENT_PAID_WITHOUT_PAYMENT,
                             String.format("Installment #%d is marked as paid but has no paid amount",

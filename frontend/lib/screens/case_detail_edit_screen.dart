@@ -8,7 +8,6 @@ import '../models/case_state.dart';
 import '../blocs/case_detail/case_detail_bloc.dart';
 import '../blocs/debt_case/debt_case_bloc.dart';
 import '../services/api_service.dart';
-import '../utils/amount_validator.dart';
 
 class CaseDetailEditScreen extends StatelessWidget {
   final String caseId;
@@ -208,10 +207,10 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
                         flex: 2,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
-                            _SimplePlaceholderCard(title: 'Pagamenti', text: 'Gestione pagamenti disponibile in vista dedicata.'),
-                            SizedBox(height: 28),
-                            _SimplePlaceholderCard(title: 'Rateizzazione', text: 'Gestione rate disponibile in vista dedicata.'),
+                          children: [
+                            _EditablePaymentsCard(s: s, bloc: context.read<CaseDetailBloc>()),
+                            const SizedBox(height: 28),
+                            const _SimplePlaceholderCard(title: 'Rateizzazione', text: 'Gestione rate disponibile in vista dedicata.'),
                           ],
                         ),
                       ),
@@ -233,28 +232,6 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
       return Container(
         margin: const EdgeInsets.symmetric(horizontal: 32),
         padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: base.surface,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.grey.shade300),
-        ),
-        child: Row(
-          children: [
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                'Gestione rate non disponibile per pratiche completate.',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-    if (s.caseData.hasInstallmentPlan != true) {
-      return Container(
-        margin: const EdgeInsets.symmetric(horizontal: 32),
-        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: base.surface,
           borderRadius: BorderRadius.circular(8),
@@ -652,5 +629,236 @@ class _SimplePlaceholderCard extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _EditablePaymentsCard extends StatelessWidget {
+  final CaseDetailLoaded s; final CaseDetailBloc bloc;
+  const _EditablePaymentsCard({required this.s, required this.bloc});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final payments = _extractPayments();
+    final fmtAmount = NumberFormat('#,##0.00', 'it_IT');
+    final residuo = s.caseData.remainingAmount ?? (s.owedAmount - (s.caseData.totalPaidAmount ?? 0));
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(24,18,24,20),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 6, offset: const Offset(0,2))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Pagamenti', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          if (payments.isEmpty) const Text('Nessun pagamento registrato', style: TextStyle(color: Colors.black54))
+          else Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  if (s.caseData.totalPaidAmount!=null) Text('Totale pagato: € ${fmtAmount.format(s.caseData.totalPaidAmount!)}', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _EditablePaymentsTable(payments: payments, hasInstallmentPlan: s.caseData.hasInstallmentPlan == true, owedAmount: s.owedAmount, onEdit: (row){ _openEditDialog(context, row); }, onDelete: (row){ _confirmDelete(context, row); }),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openEditDialog(BuildContext context, _EditablePaymentRow row){
+    final hasPlan = s.caseData.hasInstallmentPlan == true;
+    final fmtAmount = NumberFormat('#,##0.00', 'it_IT');
+    final controller = TextEditingController(text: fmtAmount.format(row.amount).replaceAll('\u00A0',''));
+    DateTime selectedDate = row.date;
+    final formKey = GlobalKey<FormState>();
+    showDialog(
+      context: context,
+      builder: (ctx){
+        return StatefulBuilder(builder: (ctx,setState){
+          double sumOthers = _extractPayments().where((p)=>p.id!=row.id).fold(0.0,(a,b)=>a+b.amount);
+          double? parsedAmount; if(!hasPlan){
+            parsedAmount = double.tryParse(controller.text.replaceAll('.', '').replaceAll(',', '.'));
+          } else { parsedAmount = row.amount; }
+          final overLimit = !hasPlan && parsedAmount!=null && (sumOthers + parsedAmount) > s.owedAmount + 0.0001; // tolleranza floating
+          return AlertDialog(
+            title: const Text('Modifica pagamento'),
+            content: SizedBox(
+              width: 380,
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (!hasPlan) TextFormField(
+                      controller: controller,
+                      decoration: const InputDecoration(labelText: 'Importo'),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+                      onChanged: (_){ setState((){}); },
+                      validator: (v){
+                        if (v==null || v.trim().isEmpty) return 'Obbligatorio';
+                        final val = double.tryParse(v.replaceAll('.', '').replaceAll(',', '.'));
+                        if (val==null || val<=0) return 'Valore non valido';
+                        if ((sumOthers + val) > s.owedAmount + 0.0001) return 'Somma pagamenti supera importo dovuto';
+                        return null;
+                      },
+                    ) else TextFormField(
+                      enabled: false,
+                      initialValue: fmtAmount.format(row.amount),
+                      decoration: const InputDecoration(labelText: 'Importo (bloccato - piano rate)')
+                    ),
+                    const SizedBox(height: 14),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: ctx,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime.now().add(const Duration(days: 0)),
+                        );
+                        if (picked!=null){ setState(()=> selectedDate = picked); }
+                      },
+                      child: InputDecorator(
+                        decoration: const InputDecoration(labelText: 'Data pagamento'),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.calendar_today, size: 18),
+                            const SizedBox(width: 8),
+                            Text('${selectedDate.day.toString().padLeft(2,'0')}/${selectedDate.month.toString().padLeft(2,'0')}/${selectedDate.year}'),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (overLimit) Padding(
+                      padding: const EdgeInsets.only(top:8.0),
+                      child: Text('Somma pagamenti supera importo dovuto', style: TextStyle(color: Colors.red.shade700, fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: ()=> Navigator.pop(ctx), child: const Text('Annulla')),
+              ElevatedButton(
+                onPressed: () {
+                  if (hasPlan){
+                    // Solo data
+                    if (selectedDate != row.date){
+                      bloc.add(UpdatePaymentEvent(paymentId: row.id, paymentDate: selectedDate));
+                    }
+                    Navigator.pop(ctx);
+                  } else {
+                    if (formKey.currentState?.validate() ?? false){
+                      final val = double.parse(controller.text.replaceAll('.', '').replaceAll(',', '.'));
+                      final changedAmount = (val - row.amount).abs() > 0.0001;
+                      final changedDate = selectedDate != row.date;
+                      if (changedAmount || changedDate){
+                        bloc.add(UpdatePaymentEvent(paymentId: row.id, amount: changedAmount? val : null, paymentDate: changedDate? selectedDate : null));
+                      }
+                      Navigator.pop(ctx);
+                    }
+                  }
+                },
+                child: const Text('Salva'),
+              ),
+            ],
+          );
+        });
+      }
+    );
+  }
+
+  void _confirmDelete(BuildContext context, _EditablePaymentRow row){
+    showDialog(
+      context: context,
+      builder: (ctx)=> AlertDialog(
+        title: const Text('Eliminare pagamento?'),
+        content: Text('Confermi eliminazione del pagamento di € ${NumberFormat('#,##0.00','it_IT').format(row.amount)} del ${_fmtDate(row.date)}?'),
+        actions: [
+          TextButton(onPressed: ()=> Navigator.pop(ctx), child: const Text('Annulla')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: (){
+              Navigator.pop(ctx);
+              bloc.add(DeletePaymentEvent(row.id));
+            },
+            child: const Text('Elimina'),
+          ),
+        ],
+      )
+    );
+  }
+
+  List<_EditablePaymentRow> _extractPayments(){
+    final list = <_EditablePaymentRow>[];
+    final raw = s.caseData.payments;
+    if (raw==null) return list;
+    for (final p in raw) {
+      try {
+        if (p is Map) {
+          final id = p['id']?.toString();
+          final amountRaw = p['amount'];
+          double? amount; if (amountRaw is num) amount = amountRaw.toDouble(); else if (amountRaw is String) amount = double.tryParse(amountRaw.replaceAll(',', '.'));
+          final dateRaw = p['paymentDate'];
+          DateTime? date; if (dateRaw is String && dateRaw.isNotEmpty){ try { date = DateTime.parse(dateRaw.length==10 && !dateRaw.contains('T') ? dateRaw : dateRaw); } catch(_){}}
+          if (id!=null && amount!=null && date!=null){
+            list.add(_EditablePaymentRow(id: id, amount: amount, date: date));
+          }
+        }
+      } catch(_){ /* ignore */ }
+    }
+    list.sort((a,b)=> a.date.compareTo(b.date));
+    return list;
+  }
+
+  String _fmtDate(DateTime d)=> '${d.day.toString().padLeft(2,'0')}/${d.month.toString().padLeft(2,'0')}/${d.year}';
+}
+
+class _EditablePaymentRow { final String id; final double amount; final DateTime date; _EditablePaymentRow({required this.id, required this.amount, required this.date}); }
+
+class _EditablePaymentsTable extends StatelessWidget {
+  final List<_EditablePaymentRow> payments; final bool hasInstallmentPlan; final double owedAmount; final void Function(_EditablePaymentRow) onEdit; final void Function(_EditablePaymentRow) onDelete;
+  const _EditablePaymentsTable({required this.payments, required this.hasInstallmentPlan, required this.owedAmount, required this.onEdit, required this.onDelete});
+  @override
+  Widget build(BuildContext context) {
+    final fmtDate = DateFormat('dd/MM/yyyy');
+    final fmtAmount = NumberFormat('#,##0.00', 'it_IT');
+    final maxRowsNoScroll = 6;
+    final rows = payments.asMap().entries.map((entry){
+      final index = entry.key; final p = entry.value; final idx = payments.length - index; // descending numbering
+      return DataRow(cells: [
+        DataCell(Text('€ ${fmtAmount.format(p.amount)}')),
+        DataCell(Text(fmtDate.format(p.date))),
+        DataCell(Row(
+          children: [
+            IconButton(tooltip: 'Modifica', icon: const Icon(Icons.edit, size:18), onPressed: ()=> onEdit(p)),
+            IconButton(tooltip: 'Elimina', icon: const Icon(Icons.delete_outline, size:18, color: Colors.red), onPressed: ()=> onDelete(p)),
+          ],
+        )),
+      ]);
+    }).toList();
+    final table = DataTable(
+      columns: const [
+        DataColumn(label: Text('Importo')),
+        DataColumn(label: Text('Data')),
+        DataColumn(label: SizedBox.shrink()),
+      ],
+      rows: rows,
+      headingRowHeight: 36,
+      dataRowMinHeight: 44,
+      dataRowMaxHeight: 52,
+    );
+    if (payments.length <= maxRowsNoScroll) return table;
+    final height = 52 * maxRowsNoScroll + 40;
+    return SizedBox(height: height.toDouble(), child: SingleChildScrollView(child: table));
   }
 }

@@ -21,7 +21,6 @@ public class InstallmentMapper {
         dto.setDueDate(installment.getDueDate());
         dto.setPaid(installment.getPaid());
         dto.setPaidDate(installment.getPaidDate());
-        dto.setPaidAmount(installment.getPaidAmount());
         dto.setCreatedDate(installment.getCreatedDate());
         dto.setLastModifiedDate(installment.getLastModifiedDate());
 
@@ -41,7 +40,6 @@ public class InstallmentMapper {
         installment.setDueDate(dto.getDueDate());
         installment.setPaid(dto.getPaid());
         installment.setPaidDate(dto.getPaidDate());
-        installment.setPaidAmount(dto.getPaidAmount());
         installment.setCreatedDate(dto.getCreatedDate());
         installment.setLastModifiedDate(dto.getLastModifiedDate());
 

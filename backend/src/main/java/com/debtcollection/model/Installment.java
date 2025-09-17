@@ -26,9 +26,6 @@ public class Installment {
     @Field("paid_date")
     private LocalDateTime paidDate;
 
-    @Field("paid_amount")
-    private BigDecimal paidAmount;
-
     // Audit fields - USER PREFERENCE: Embedded audit tracking
     @Field("created_date")
     private LocalDateTime createdDate;

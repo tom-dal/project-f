@@ -18,7 +18,6 @@ public class InstallmentPaymentRequest {
     @Positive(message = "Payment amount must be positive")
     private BigDecimal amount;
 
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
     private LocalDateTime paymentDate;
 }

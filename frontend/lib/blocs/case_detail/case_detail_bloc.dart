@@ -60,6 +60,42 @@ class RegisterCasePayment extends CaseDetailEvent {
   List<Object?> get props => [amount, paymentDate];
 }
 
+class RegisterInstallmentPayment extends CaseDetailEvent {
+  final String installmentId;
+  final double amount;
+  final DateTime paymentDate;
+  RegisterInstallmentPayment({required this.installmentId, required this.amount, required this.paymentDate});
+  @override
+  List<Object?> get props => [installmentId, amount, paymentDate];
+}
+
+// Nuovi eventi pagamenti per modalità modifica
+class UpdatePaymentEvent extends CaseDetailEvent {
+  final String paymentId;
+  final double? amount;
+  final DateTime? paymentDate;
+  UpdatePaymentEvent({required this.paymentId, this.amount, this.paymentDate});
+  @override
+  List<Object?> get props => [paymentId, amount, paymentDate];
+}
+class DeletePaymentEvent extends CaseDetailEvent {
+  final String paymentId;
+  DeletePaymentEvent(this.paymentId);
+  @override
+  List<Object?> get props => [paymentId];
+}
+
+class ReplaceInstallmentPlanSimple extends CaseDetailEvent {
+  final int numberOfInstallments;
+  final DateTime firstDueDate;
+  final double perInstallmentAmountFloor; // amount for each (remainder added to last)
+  final int frequencyDays;
+  final double total; // residuo totale
+  ReplaceInstallmentPlanSimple({required this.numberOfInstallments, required this.firstDueDate, required this.perInstallmentAmountFloor, required this.frequencyDays, required this.total});
+  @override
+  List<Object?> get props => [numberOfInstallments, firstDueDate, perInstallmentAmountFloor, frequencyDays, total];
+}
+
 class ResetCaseEdits extends CaseDetailEvent {}
 
 // STATES
@@ -161,7 +197,11 @@ class CaseDetailBloc extends Bloc<CaseDetailEvent, CaseDetailState> {
     on<DeleteInstallmentPlanEvent>(_onDeletePlan);
     on<DeleteCaseEvent>(_onDeleteCase);
     on<RegisterCasePayment>(_onRegisterPayment);
+    on<RegisterInstallmentPayment>(_onRegisterInstallmentPayment);
     on<ResetCaseEdits>(_onResetCaseEdits);
+    on<UpdatePaymentEvent>(_onUpdatePayment);
+    on<DeletePaymentEvent>(_onDeletePayment);
+    on<ReplaceInstallmentPlanSimple>(_onReplacePlanSimple);
   }
 
   Future<void> _onLoad(LoadCaseDetail e, Emitter<CaseDetailState> emit) async {
@@ -380,7 +420,117 @@ class CaseDetailBloc extends Bloc<CaseDetailEvent, CaseDetailState> {
     }
   }
 
-  void _onResetCaseEdits(ResetCaseEdits e, Emitter<CaseDetailState> emit){
+  Future<void> _onRegisterInstallmentPayment(RegisterInstallmentPayment e, Emitter<CaseDetailState> emit) async {
+    final s = state; if (s is! CaseDetailLoaded) return;
+    emit(s.copyWith(saving: true, error: null, successMessage: null));
+    try {
+      await api.registerInstallmentPayment(
+        caseId: s.caseData.id,
+        installmentId: e.installmentId,
+        amount: e.amount,
+        paymentDate: e.paymentDate,
+      );
+      final data = await api.getCaseById(s.caseData.id);
+      final map = <String, Installment>{ for (final inst in (data.installments ?? [])) inst.id : inst };
+      emit(CaseDetailLoaded(
+        caseData: data,
+        debtorName: data.debtorName,
+        owedAmount: data.owedAmount,
+        state: data.state,
+        nextDeadline: data.nextDeadlineDate,
+        notes: data.notes,
+        ongoingNegotiations: data.ongoingNegotiations ?? false,
+        dirty: false,
+        saving: false,
+        localInstallments: map,
+        installmentDirty: {},
+        replacingPlan: false,
+        successMessage: 'Pagamento rata registrato',
+      ));
+    } catch (ex) {
+      emit(s.copyWith(saving: false, error: ex.toString(), successMessage: null));
+    }
+  }
+
+  Future<void> _onUpdatePayment(UpdatePaymentEvent e, Emitter<CaseDetailState> emit) async {
+    final s = state; if (s is! CaseDetailLoaded) return;
+    emit(s.copyWith(saving: true, error: null, successMessage: null));
+    try {
+      await api.updatePayment(caseId: s.caseData.id, paymentId: e.paymentId, amount: e.amount, paymentDate: e.paymentDate);
+      final data = await api.getCaseById(s.caseData.id);
+      final map = <String, Installment>{ for (final inst in (data.installments ?? [])) inst.id : inst };
+      emit(CaseDetailLoaded(
+        caseData: data,
+        debtorName: data.debtorName,
+        owedAmount: data.owedAmount,
+        state: data.state,
+        nextDeadline: data.nextDeadlineDate,
+        notes: data.notes,
+        ongoingNegotiations: data.ongoingNegotiations ?? false,
+        dirty: false,
+        saving: false,
+        localInstallments: map,
+        installmentDirty: {},
+        replacingPlan: false,
+        successMessage: 'Pagamento aggiornato',
+      ));
+    } catch (ex) {
+      emit(s.copyWith(saving: false, error: ex.toString(), successMessage: null));
+    }
+  }
+
+  Future<void> _onDeletePayment(DeletePaymentEvent e, Emitter<CaseDetailState> emit) async {
+    final s = state; if (s is! CaseDetailLoaded) return;
+    emit(s.copyWith(saving: true, error: null, successMessage: null));
+    try {
+      await api.deletePayment(caseId: s.caseData.id, paymentId: e.paymentId);
+      final data = await api.getCaseById(s.caseData.id);
+      final map = <String, Installment>{ for (final inst in (data.installments ?? [])) inst.id : inst };
+      emit(CaseDetailLoaded(
+        caseData: data,
+        debtorName: data.debtorName,
+        owedAmount: data.owedAmount,
+        state: data.state,
+        nextDeadline: data.nextDeadlineDate,
+        notes: data.notes,
+        ongoingNegotiations: data.ongoingNegotiations ?? false,
+        dirty: false,
+        saving: false,
+        localInstallments: map,
+        installmentDirty: {},
+        replacingPlan: false,
+        successMessage: 'Pagamento eliminato',
+      ));
+    } catch (ex) {
+      emit(s.copyWith(saving: false, error: ex.toString(), successMessage: null));
+    }
+  }
+
+  Future<void> _onReplacePlanSimple(ReplaceInstallmentPlanSimple e, Emitter<CaseDetailState> emit) async {
+    final s = state; if (s is! CaseDetailLoaded) return;
+    emit(s.copyWith(saving:true,error:null,successMessage:null));
+    try {
+      final list = <Map<String,dynamic>>[];
+      double distributed = 0.0;
+      for (int i=0;i<e.numberOfInstallments;i++){
+        double amount;
+        if (i == e.numberOfInstallments -1) {
+          amount = double.parse((e.total - distributed).toStringAsFixed(2));
+        } else {
+            amount = e.perInstallmentAmountFloor;
+            distributed += amount;
+        }
+        final dueDate = e.firstDueDate.add(Duration(days: e.frequencyDays * i));
+        list.add({'amount': amount, 'dueDate': dueDate.toIso8601String()});
+      }
+      await api.replaceInstallmentPlan(caseId: s.caseData.id, installments: list);
+      add(LoadCaseDetail(s.caseData.id));
+    } catch(ex){
+      emit(s.copyWith(saving:false,error: ex.toString()));
+    }
+  }
+
+  Future<void> _onResetCaseEdits(ResetCaseEdits e, Emitter<CaseDetailState> emit){
     final s = state; if (s is! CaseDetailLoaded) return; if(s.saving) return;
     emit(s.copyWith(
       debtorName: s.caseData.debtorName,

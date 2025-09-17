@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../models/debt_case.dart';
 import '../models/case_state.dart';
+import '../models/installment.dart';
 import '../blocs/case_detail/case_detail_bloc.dart';
 import '../services/api_service.dart';
 import '../utils/amount_validator.dart';
@@ -100,8 +101,8 @@ class _CaseDetailReadOnlyViewState extends State<_CaseDetailReadOnlyView> {
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 1300),
                     child: wide
-                      ? _TwoColumnBody(state: s, openRegisterPayment: _openRegisterPaymentDialog, openEdit: ()=>_openEdit(context, s))
-                      : _SingleColumnBody(state: s, openRegisterPayment: _openRegisterPaymentDialog, openEdit: ()=>_openEdit(context, s)),
+                      ? _TwoColumnBody(state: s, openRegisterPayment: _openRegisterPaymentDialog, openEdit: ()=>_openEdit(context, s), openRegisterInstallmentPayment: _openRegisterInstallmentPaymentDialog, onCreatePlan: ()=>_openCreateInstallmentPlanDialog(s))
+                      : _SingleColumnBody(state: s, openRegisterPayment: _openRegisterPaymentDialog, openEdit: ()=>_openEdit(context, s), openRegisterInstallmentPayment: _openRegisterInstallmentPaymentDialog, onCreatePlan: ()=>_openCreateInstallmentPlanDialog(s)),
                   ),
                 ),
               );
@@ -311,13 +312,331 @@ class _CaseDetailReadOnlyViewState extends State<_CaseDetailReadOnlyView> {
       },
     );
   }
+
+  // Apertura dialog creazione piano rateale
+  void _openCreateInstallmentPlanDialog(CaseDetailLoaded s) {
+    final residuo = s.caseData.remainingAmount ?? (s.owedAmount - (s.caseData.totalPaidAmount ?? 0));
+    if (residuo <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nessun importo residuo su cui creare un piano rateale')));
+      return;
+    }
+    final installmentsCtrl = TextEditingController(text: '2');
+    final frequencyCtrl = TextEditingController(text: '30');
+    final formKey = GlobalKey<FormState>();
+    int parsedInstallments = 2;
+    int parsedFrequency = 30;
+    DateTime firstDueDate = DateTime.now().add(Duration(days: parsedFrequency));
+    bool userPickedDate = false; // se l'utente modifica manualmente la data non viene più ricalcolata automaticamente
+
+    double _calcPerInstallmentFloor(double total, int n){
+      if (n <= 0) return 0; // safety
+      // Rounding strategy: floor to 2 decimals so last installment can absorb remainder manual later
+      final raw = total / n;
+      return (raw * 100).floor() / 100.0;
+    }
+
+    double _remainingAfterDistribution(double total, double perInstallment, int n){
+      final distributed = perInstallment * n;
+      final rem = total - distributed;
+      // floating precision safety
+      return double.parse(rem.toStringAsFixed(2));
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx){
+        return StatefulBuilder(builder: (ctx, setState){
+          final fmt = NumberFormat('#,##0.00', 'it_IT');
+          void recalc({bool fromFrequency=false}){
+            parsedInstallments = int.tryParse(installmentsCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+            parsedFrequency = int.tryParse(frequencyCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+            if (parsedFrequency <= 0) parsedFrequency = 1;
+            if (!userPickedDate && (fromFrequency || parsedFrequency != 0)) {
+              firstDueDate = DateTime.now().add(Duration(days: parsedFrequency));
+            }
+            setState((){});
+          }
+
+            Future<void> _pickDate() async {
+              final now = DateTime.now();
+              final picked = await showDatePicker(
+                context: ctx,
+                initialDate: firstDueDate,
+                firstDate: DateTime(now.year - 1),
+                lastDate: DateTime(now.year + 5),
+                locale: const Locale('it','IT'),
+                helpText: 'Prima scadenza',
+                builder: (context, child){
+                  final theme = Theme.of(context);
+                  return Theme(
+                    data: theme.copyWith(
+                      colorScheme: theme.colorScheme.copyWith(
+                        primary: theme.colorScheme.primary,
+                        surface: theme.colorScheme.surface,
+                        secondary: theme.colorScheme.secondary,
+                      ),
+                      datePickerTheme: const DatePickerThemeData(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(20))),
+                      ),
+                    ),
+                    child: child ?? const SizedBox.shrink(),
+                  );
+                }
+              );
+              if (picked != null) {
+                setState((){ firstDueDate = DateTime(picked.year, picked.month, picked.day); userPickedDate = true; });
+              }
+            }
+
+          double perInstallment = _calcPerInstallmentFloor(residuo, parsedInstallments);
+          double remainder = _remainingAfterDistribution(residuo, perInstallment, parsedInstallments);
+
+          String? _validate(){
+            if (parsedInstallments < 2) return 'Numero di rate minimo 2';
+            if (parsedInstallments > 240) return 'Numero di rate troppo elevato';
+            if (perInstallment < 0.01) return 'Importo per rata troppo basso';
+            if (parsedFrequency < 1) return 'Giorni tra rate minimo 1';
+            if (parsedFrequency > 365) return 'Giorni tra rate massimo 365';
+            return null;
+          }
+
+          void _submit(){
+            final err = _validate();
+            if (err != null) {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+              return;
+            }
+            // Dispatch evento creando piano. L'ultima rata potrà essere aggiustata dopo la creazione.
+            context.read<CaseDetailBloc>().add(CreateInstallmentPlanEvent(
+              numberOfInstallments: parsedInstallments,
+              firstDueDate: firstDueDate,
+              installmentAmount: perInstallment,
+              frequencyDays: parsedFrequency,
+            ));
+            Navigator.pop(ctx);
+          }
+
+          final base = Theme.of(context).colorScheme;
+          InputDecoration fieldDec(String label) => InputDecoration(
+            labelText: label,
+            filled: true,
+            fillColor: base.surface,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: base.outline.withAlpha((0.30*255).round()))),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          );
+
+          String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2,'0')}/${d.month.toString().padLeft(2,'0')}/${d.year}';
+
+          final validationError = _validate();
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            title: Text('Crea piano rateale', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+            content: Form(
+              key: formKey,
+              child: SizedBox(
+                width: 520,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Importo residuo: € ${fmt.format(residuo)}', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: installmentsCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: fieldDec('Numero rate'),
+                            onChanged: (_)=>recalc(),
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextFormField(
+                            controller: frequencyCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: fieldDec('Giorni tra rate'),
+                            onChanged: (_)=>recalc(fromFrequency:true),
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: _pickDate,
+                      child: InputDecorator(
+                        decoration: InputDecoration(
+                          labelText: 'Prima scadenza',
+                          filled: true,
+                          fillColor: base.surface,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: base.outline.withAlpha((0.30 * 255).round()))),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: base.outline.withAlpha((0.30 * 255).round()))),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(child: Text(_fmtDate(firstDueDate), style: const TextStyle(fontWeight: FontWeight.w500))),
+                            const Icon(Icons.date_range, size: 20),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Text('Anteprima', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                    const SizedBox(height:8),
+                    Builder(builder: (_){
+                      if (parsedInstallments < 2) return const Text('Inserisci almeno 2 rate', style: TextStyle(color: Colors.black54));
+                      if (perInstallment < 0.01) return const Text('Importo rata risultante troppo basso', style: TextStyle(color: Colors.redAccent));
+                      final covered = perInstallment * parsedInstallments;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Importo stimato per rata: € ${fmt.format(perInstallment)}'),
+                          if (remainder > 0) Text('Resto non coperto: € ${fmt.format(remainder)} (potrà essere aggiustato modificando l\'ultima rata dopo la creazione).', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                          Text('Totale coperto: € ${fmt.format(covered)}', style: const TextStyle(fontSize: 12)),
+                        ],
+                      );
+                    }),
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    const Text('Le singole rate potranno essere modificate successivamente.', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+                    if (validationError != null) Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(validationError, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: ()=>Navigator.pop(ctx), child: const Text('Annulla')),
+              ElevatedButton.icon(
+                onPressed: validationError == null ? _submit : null,
+                icon: const Icon(Icons.check, size: 18),
+                label: const Text('Crea piano'),
+              ),
+            ],
+          );
+        });
+      }
+    );
+  }
+
+  void _openRegisterInstallmentPaymentDialog(Installment inst, CaseDetailLoaded s){
+    if (inst.paid == true) return; // already paid safeguard
+    final amount = inst.amount;
+    DateTime selectedDate = DateTime.now();
+    showDialog(
+      context: context,
+      builder: (ctx){
+        return StatefulBuilder(builder: (ctx,setState){
+          String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2,'0')}/${d.month.toString().padLeft(2,'0')}/${d.year}';
+          Future<void> _pickDate() async {
+            final now = DateTime.now();
+            final picked = await showDatePicker(
+              context: ctx,
+              initialDate: selectedDate,
+              firstDate: DateTime(now.year - 1),
+              lastDate: DateTime(now.year + 5),
+              locale: const Locale('it','IT'),
+              helpText: 'Data pagamento rata',
+              builder: (context, child){
+                final theme = Theme.of(context);
+                return Theme(
+                  data: theme.copyWith(
+                    colorScheme: theme.colorScheme.copyWith(
+                      primary: theme.colorScheme.primary,
+                      surface: theme.colorScheme.surface,
+                      secondary: theme.colorScheme.secondary,
+                    ),
+                    datePickerTheme: const DatePickerThemeData(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(20))),
+                    ),
+                  ),
+                  child: child ?? const SizedBox.shrink(),
+                );
+              }
+            );
+            if (picked != null) setState(()=> selectedDate = DateTime(picked.year, picked.month, picked.day));
+          }
+          void _submit(){
+            context.read<CaseDetailBloc>().add(RegisterInstallmentPayment(
+              installmentId: inst.id,
+              amount: amount,
+              paymentDate: selectedDate,
+            ));
+            Navigator.pop(ctx);
+          }
+          final base = Theme.of(context).colorScheme;
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            title: Text('Registra pagamento rata #${inst.installmentNumber}', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextFormField(
+                    enabled: false,
+                    initialValue: NumberFormat('#,##0.00','it_IT').format(amount),
+                    decoration: InputDecoration(
+                      labelText: 'Importo rata (€)',
+                      disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: base.outline.withAlpha((0.20*255).round()))),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: _pickDate,
+                    child: InputDecorator(
+                      decoration: InputDecoration(
+                        labelText: 'Data pagamento',
+                        filled: true,
+                        fillColor: base.surface,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: base.outline.withAlpha((0.30 * 255).round()))),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: base.outline.withAlpha((0.30 * 255).round()))),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(child: Text(_fmtDate(selectedDate), style: const TextStyle(fontWeight: FontWeight.w500))),
+                          const Icon(Icons.date_range, size: 20),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: ()=>Navigator.pop(ctx), child: const Text('Annulla')),
+              ElevatedButton.icon(onPressed: _submit, icon: const Icon(Icons.check, size: 18), label: const Text('Conferma')),
+            ],
+          );
+        });
+      }
+    );
+  }
 }
 
 class _TwoColumnBody extends StatelessWidget {
   final CaseDetailLoaded state;
   final void Function(CaseDetailLoaded) openRegisterPayment;
   final VoidCallback openEdit;
-  const _TwoColumnBody({required this.state, required this.openRegisterPayment, required this.openEdit});
+  final void Function(Installment, CaseDetailLoaded) openRegisterInstallmentPayment;
+  final void Function() onCreatePlan; // nuova callback
+  const _TwoColumnBody({required this.state, required this.openRegisterPayment, required this.openEdit, required this.openRegisterInstallmentPayment, required this.onCreatePlan});
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -346,13 +665,13 @@ class _TwoColumnBody extends StatelessWidget {
         const SizedBox(width: 32),
         // RIGHT
         Expanded(
-          flex: 2,
+          flex: 3,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _PaymentsSection(s: state, onRegisterPayment: openRegisterPayment),
               const SizedBox(height: 28),
-              _InstallmentsSideCard(s: state, openEdit: openEdit),
+              _InstallmentsSideCard(s: state, openEdit: openEdit, openRegisterInstallmentPayment: (inst)=>openRegisterInstallmentPayment(inst, state), onCreatePlan: onCreatePlan),
             ],
           ),
         )
@@ -365,7 +684,9 @@ class _SingleColumnBody extends StatelessWidget {
   final CaseDetailLoaded state;
   final void Function(CaseDetailLoaded) openRegisterPayment;
   final VoidCallback openEdit;
-  const _SingleColumnBody({required this.state, required this.openRegisterPayment, required this.openEdit});
+  final void Function(Installment, CaseDetailLoaded) openRegisterInstallmentPayment;
+  final void Function() onCreatePlan; // nuova callback
+  const _SingleColumnBody({required this.state, required this.openRegisterPayment, required this.openEdit, required this.openRegisterInstallmentPayment, required this.onCreatePlan});
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -375,7 +696,7 @@ class _SingleColumnBody extends StatelessWidget {
         const SizedBox(height: 24),
         _PaymentsSection(s: state, onRegisterPayment: openRegisterPayment),
         const SizedBox(height: 24),
-        _InstallmentsSideCard(s: state, openEdit: openEdit),
+        _InstallmentsSideCard(s: state, openEdit: openEdit, openRegisterInstallmentPayment: (inst)=>openRegisterInstallmentPayment(inst, state), onCreatePlan: onCreatePlan),
         const SizedBox(height: 24),
         _LeftSectionCard(title: 'Dati pratica', child: _FieldsGrid(s: state, twoColumns: false)),
         const SizedBox(height: 24),
@@ -531,7 +852,6 @@ class _PaymentsSection extends StatelessWidget {
                 children: [
                   if (s.caseData.totalPaidAmount!=null) Text('Totale pagato: € ${fmt.format(s.caseData.totalPaidAmount!)}', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                   const Spacer(),
-                  if (residuo>0) Text('Residuo: € ${fmt.format(residuo)}', style: Theme.of(context).textTheme.bodyMedium),
                 ],
               ),
               const SizedBox(height: 12),
@@ -569,7 +889,7 @@ class _PaymentsSection extends StatelessWidget {
         list.add(_PaymentRow(amount: 0.0, date: DateTime.fromMillisecondsSinceEpoch(0), invalid: true));
       }
     }
-    list.sort((a,b)=> b.date.compareTo(a.date));
+    list.sort((a,b)=> a.date.compareTo(b.date));
     return list;
   }
 }
@@ -583,18 +903,17 @@ class _PaymentsTable extends StatelessWidget {
   Widget build(BuildContext context) {
     final fmt = DateFormat('dd/MM/yyyy'); // FIX: was NumberFormat causing isNegative on DateTime
     final fmtAmount = NumberFormat('#,##0.00', 'it_IT');
-    final maxRowsNoScroll = 6;
+    final maxRowsNoScroll = 10;
     final rows = payments.mapIndexed((index, p){
       final idx = payments.length - index; // descending numbering
-      return DataRow(cells: [
-        DataCell(Text(idx.toString())),
+      return DataRow(
+          cells: [
         DataCell(Text(p.invalid? '?' : '€ ${fmtAmount.format(p.amount)}')),
         DataCell(Text(p.invalid? '?' : fmt.format(p.date))),
       ]);
     }).toList();
     final table = DataTable(
       columns: const [
-        DataColumn(label: Text('#')),
         DataColumn(label: Text('Importo')),
         DataColumn(label: Text('Data')),
       ],
@@ -634,24 +953,6 @@ class _NegotiationChip extends StatelessWidget {
   }
 }
 
-class _SectionTitle extends StatelessWidget {
-  final String title;
-  const _SectionTitle(this.title);
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Row(
-        children: [
-          Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
-          const SizedBox(width: 8),
-          Expanded(child: Divider(thickness: 1)),
-        ],
-      ),
-    );
-  }
-}
-
 class _FieldsGrid extends StatelessWidget {
   final CaseDetailLoaded s;
   final bool twoColumns;
@@ -673,9 +974,9 @@ class _FieldsGrid extends StatelessWidget {
     final children = fields.map((f) => _FieldTile(data: f)).toList();
     if (twoColumns) {
       return Wrap(
-        spacing: 40,
+        spacing: 20,
         runSpacing: 12,
-        children: children.map((w) => SizedBox(width: 300, child: w)).toList(),
+        children: children.map((w) => SizedBox(width: 150, child: w)).toList(),
       );
     } else {
       return Column(
@@ -697,7 +998,7 @@ class _FieldTile extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(data.label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: base.secondary)),
+        Text(data.label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: base.tertiary)),
         const SizedBox(height: 2),
         Text(data.value, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500)),
       ],
@@ -757,11 +1058,15 @@ class _StateChip extends StatelessWidget {
 
 class _InstallmentsSideCard extends StatelessWidget {
   final CaseDetailLoaded s; final VoidCallback openEdit;
-  const _InstallmentsSideCard({required this.s, required this.openEdit});
+  final void Function(Installment inst) openRegisterInstallmentPayment;
+  final VoidCallback? onCreatePlan; // opzionale per stato senza piano
+  const _InstallmentsSideCard({required this.s, required this.openEdit, required this.openRegisterInstallmentPayment, this.onCreatePlan});
   @override
   Widget build(BuildContext context) {
     final base = Theme.of(context).colorScheme;
     if (s.caseData.hasInstallmentPlan != true) {
+      final residuo = s.caseData.remainingAmount ?? (s.owedAmount - (s.caseData.totalPaidAmount ?? 0));
+      final canCreate = residuo > 0 && s.state != CaseState.completata;
       return Container(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
         decoration: BoxDecoration(
@@ -769,24 +1074,57 @@ class _InstallmentsSideCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 6, offset: const Offset(0,2))],
         ),
-        child: Text('Nessun piano rate', style: Theme.of(context).textTheme.labelLarge)
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Piano rateale', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 12),
+            const Text('Nessun piano rate', style: TextStyle(color: Colors.black54)),
+            const SizedBox(height: 16),
+            if (canCreate && onCreatePlan != null) ElevatedButton.icon(
+              onPressed: onCreatePlan,
+              icon: const Icon(Icons.playlist_add_circle_outlined),
+              label: const Text('Crea piano rateale'),
+            ),
+            if (!canCreate) const Text('Impossibile creare un piano (debito saldato o pratica completata).', style: TextStyle(fontSize: 12, color: Colors.black54)),
+          ],
+        ),
       );
     }
     final list = s.localInstallments.values.toList()..sort((a,b)=>a.dueDate.compareTo(b.dueDate));
     final fmt = DateFormat('dd/MM/yyyy');
-    final maxRows = 8;
+    const maxRows = 10;
     final rows = list.map((i) => DataRow(cells: [
       DataCell(Text(i.installmentNumber.toString())),
       DataCell(Text('€ ${i.amount.toStringAsFixed(2).replaceAll('.', ',')}')),
       DataCell(Text(fmt.format(i.dueDate))),
-      DataCell(Text(i.paid==true? 'Pagata' : 'Da pagare', style: TextStyle(color: i.paid==true? Colors.green : Colors.orange))),
+      DataCell(Text(i.paid==true? 'Pagata' : i.dueDate.isBefore(DateTime.now())? 'Scaduta' : 'Da pagare',
+          style: TextStyle(color: i.paid==true? Colors.green : i.dueDate.isBefore(DateTime.now())? Colors.red : Colors.orange, fontWeight: FontWeight.w600))),
+      DataCell(
+        Center(
+          child: i.paid==true || s.state==CaseState.completata ? const SizedBox.shrink() : Tooltip(
+            message: 'Registra pagamento',
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                minimumSize: const Size(0, 32), // Più compatto
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              onPressed: ()=>openRegisterInstallmentPayment(i),
+              icon: const Icon(Icons.payments_outlined, size: 15),
+              label: const Text('Paga', style: TextStyle(fontSize: 12)),
+            ),
+          ),
+        ),
+      ),
     ])).toList();
     final table = DataTable(
       columns: const [
-        DataColumn(label: Text('#')),
-        DataColumn(label: Text('Importo')),
+        DataColumn(label:  SizedBox.shrink()), // Colonna numero fissa e stretta
+        DataColumn(label: Text('Importo')), // Colonna importo fissa
         DataColumn(label: Text('Scadenza')),
         DataColumn(label: Text('Stato')),
+        DataColumn(label: SizedBox.shrink()), // Colonna azione centrata e fissa
       ],
       rows: rows,
       headingRowHeight: 34,
@@ -824,3 +1162,4 @@ class _InstallmentsSideCard extends StatelessWidget {
     );
   }
 }
+

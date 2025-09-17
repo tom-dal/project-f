@@ -283,7 +283,14 @@ public class DataInitializer implements CommandLineRunner {
                             due = now.minusDays(40);
                             inst.setPaid(true);
                             inst.setPaidDate(now.minusDays(35));
-                            inst.setPaidAmount(amount);
+                            Payment payment = new Payment();
+                            payment.setPaymentId(UUID.randomUUID().toString());
+                            payment.setAmount(inst.getAmount().doubleValue());
+                            payment.setPaymentDate(inst.getPaidDate().toLocalDate());
+                            payment.setInstallmentId(inst.getInstallmentId());
+                            //payment.setCreatedDate(inst.getPaidDate());
+                            //payment.setLastModifiedDate(inst.getPaidDate());
+                            c.getPayments().add(payment);
                         } else if (n == 2) {
                             due = now.minusDays(10); // overdue unpaid
                             inst.setPaid(false);
