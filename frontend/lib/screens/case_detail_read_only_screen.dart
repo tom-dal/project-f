@@ -827,7 +827,7 @@ class _PaymentsSection extends StatelessWidget {
       decoration: BoxDecoration(
         color: base.surface,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 6, offset: const Offset(0,2))],
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0,2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -846,7 +846,7 @@ class _PaymentsSection extends StatelessWidget {
           const SizedBox(height: 12),
           if (payments.isEmpty) const Text('Nessun pagamento registrato', style: TextStyle(color: Colors.black54))
           else Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Row(
                 children: [
@@ -1148,7 +1148,7 @@ class _InstallmentsSideCard extends StatelessWidget {
         boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0,2))],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Row(
             children: [

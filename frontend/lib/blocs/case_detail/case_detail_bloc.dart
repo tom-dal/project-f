@@ -530,8 +530,10 @@ class CaseDetailBloc extends Bloc<CaseDetailEvent, CaseDetailState> {
     }
   }
 
-  Future<void> _onResetCaseEdits(ResetCaseEdits e, Emitter<CaseDetailState> emit){
-    final s = state; if (s is! CaseDetailLoaded) return; if(s.saving) return;
+  Future<void> _onResetCaseEdits(ResetCaseEdits e, Emitter<CaseDetailState> emit) async {
+    final s = state;
+    if (s is! CaseDetailLoaded) return;
+    if (s.saving) return;
     emit(s.copyWith(
       debtorName: s.caseData.debtorName,
       owedAmount: s.caseData.owedAmount,
