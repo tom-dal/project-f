@@ -19,7 +19,8 @@ class _CreateCaseDialogState extends State<CreateCaseDialog> {
   final _debtorNameController = TextEditingController();
   final _amountController = TextEditingController();
   final _dateFormat = AppDateFormats.date; // centralizzato
-  DateTime? _lastStateDate; // CUSTOM IMPLEMENTATION: make optional
+  DateTime? _lastStateDate = DateTime.now();
+
   CaseState _initialState = CaseState.messaInMoraDaFare;
   bool _submitting = false; // CUSTOM IMPLEMENTATION: prevent double submit
   final _debtorFocus = FocusNode();
@@ -152,8 +153,7 @@ class _CreateCaseDialogState extends State<CreateCaseDialog> {
 
                 Widget dateField = InputDecorator(
                   decoration: InputDecoration(
-                    labelText: 'Data Stato (opzionale)',
-                    helperText: 'Vuota = oggi',
+                    labelText: 'Data Stato',
                     border: const OutlineInputBorder(),
                     suffixIcon: _lastStateDate != null ? IconButton(
                       tooltip: 'Rimuovi',
