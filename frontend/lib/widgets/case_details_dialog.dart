@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:intl/intl.dart';
 import '../models/debt_case.dart';
 import '../models/case_state.dart';
 import '../blocs/debt_case/debt_case_bloc.dart';
+import '../utils/date_formats.dart';
 
 class CaseDetailsDialog extends StatefulWidget {
   final DebtCase debtCase;
@@ -23,7 +23,6 @@ class _CaseDetailsDialogState extends State<CaseDetailsDialog> {
   late CaseState _selectedState;
   late CaseState _originalState;
   late String _originalNotes;
-  final _dateFormat = DateFormat('dd/MM/yyyy HH:mm');
   bool _isEditMode = false; // Aggiunta modalità di modifica
 
   @override
@@ -119,11 +118,11 @@ class _CaseDetailsDialogState extends State<CaseDetailsDialog> {
                         _buildInfoRow('Importo', '€ ${widget.debtCase.owedAmount.toStringAsFixed(2)}'),
                         _buildInfoRow('Data Creazione',
                             widget.debtCase.createdDate != null 
-                                ? _dateFormat.format(widget.debtCase.createdDate!)
+                                ? AppDateFormats.dateTime.format(widget.debtCase.createdDate!)
                                 : 'N/A'),
                         _buildInfoRow('Ultimo Aggiornamento', 
                             widget.debtCase.updatedDate != null 
-                                ? _dateFormat.format(widget.debtCase.updatedDate!)
+                                ? AppDateFormats.dateTime.format(widget.debtCase.updatedDate!)
                                 : 'N/A'),
                       ],
                     ),
@@ -183,7 +182,7 @@ class _CaseDetailsDialogState extends State<CaseDetailsDialog> {
             ] else ...[
               _buildInfoRow('Stato Attuale', _getStateDisplayName(_selectedState)),
               _buildInfoRow('Data Ultimo Stato',
-                  _dateFormat.format(widget.debtCase.lastStateDate)),
+                  AppDateFormats.dateTime.format(widget.debtCase.lastStateDate)),
             ],
           ],
         ),

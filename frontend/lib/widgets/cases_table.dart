@@ -24,8 +24,8 @@ class CasesTableHeader extends StatelessWidget {
           _hCell('DEBITORE', flex: 3, style: style),
           _hCell('STATO', flex: 2, style: style),
           _hCell('ULTIMA ATTIVITÀ', flex: 2, style: style),
-          _hCell('SCADENZA', flex: 2, style: style),
-          _hCell('RATEIZZAZIONE', flex: 1, style: style), // new column
+          _hCell('PROSSIMA SCADENZA', flex: 2, style: style),
+          _hCell('RATEIZZAZIONE', flex: 1, style: style),
         ],
       ),
     );

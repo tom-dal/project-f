@@ -4,6 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../blocs/debt_case/debt_case_bloc.dart';
 import '../models/case_state.dart';
+import '../utils/italian_date_picker.dart';
+import '../utils/date_formats.dart';
 
 class CreateCaseDialog extends StatefulWidget {
   const CreateCaseDialog({super.key});
@@ -16,7 +18,7 @@ class _CreateCaseDialogState extends State<CreateCaseDialog> {
   final _formKey = GlobalKey<FormState>();
   final _debtorNameController = TextEditingController();
   final _amountController = TextEditingController();
-  final _dateFormat = DateFormat('dd/MM/yyyy');
+  final _dateFormat = AppDateFormats.date; // centralizzato
   DateTime? _lastStateDate; // CUSTOM IMPLEMENTATION: make optional
   CaseState _initialState = CaseState.messaInMoraDaFare;
   bool _submitting = false; // CUSTOM IMPLEMENTATION: prevent double submit
@@ -66,11 +68,12 @@ class _CreateCaseDialogState extends State<CreateCaseDialog> {
 
   Future<void> _selectDate(BuildContext context) async {
     final DateTime initial = _lastStateDate ?? DateTime.now();
-    final DateTime? picked = await showDatePicker(
-      context: context,
+    final DateTime? picked = await pickItalianDate(
+      context,
       initialDate: initial,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
+      helpText: 'Data stato',
     );
     if (picked != null && mounted) {
       setState(() { _lastStateDate = picked; });

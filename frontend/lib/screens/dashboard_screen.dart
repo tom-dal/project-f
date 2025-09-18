@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:intl/intl.dart';
 import '../blocs/debt_case/debt_case_bloc.dart';
 import '../blocs/cases_summary/cases_summary_bloc.dart';
 import '../models/case_state.dart';
@@ -10,6 +9,7 @@ import '../widgets/case_filters.dart';
 import '../widgets/cases_summary_section.dart';
 import '../widgets/cases_table.dart';
 import 'case_detail_read_only_screen.dart';
+import '../utils/date_formats.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -18,7 +18,7 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  final _dateFormat = DateFormat('dd/MM/yyyy');
+  final _dateFormat = AppDateFormats.date; // centralizzato
   String _searchQuery = '';// USER PREFERENCE: backend filtering
   List<CaseState> _statesFilter = [];// USER PREFERENCE
   DateTime? _deadlineFrom;
@@ -329,7 +329,15 @@ class _PaginationControls extends StatelessWidget {
       const SizedBox(width:16),
       ElevatedButton.icon(onPressed: hasNext?onNext:null, icon: const Icon(Icons.chevron_right), label: const Text('Successiva')),
       const SizedBox(width:32),
-      DropdownButton<int>(value: pageSize, items: pageSizeOptions.map((s)=>DropdownMenuItem<int>(value:s, child: Text('$s/pg'))).toList(), onChanged: onPageSizeChanged),
+      Row(
+
+        children: [
+          Text('Elementi per pagina:', style: TextStyle(fontSize: 13, color: Colors.grey[700], fontWeight: FontWeight.w500)),
+          const SizedBox(width:16),
+          DropdownButton<int>(
+              value: pageSize, items: pageSizeOptions.map((s)=>DropdownMenuItem<int>(value:s, child: Text('$s'))).toList(), onChanged: onPageSizeChanged),
+          const SizedBox(width:16),],
+      ),
     ]);
   }
 }

@@ -9,6 +9,8 @@ import '../models/installment.dart';
 import '../blocs/case_detail/case_detail_bloc.dart';
 import '../blocs/debt_case/debt_case_bloc.dart';
 import '../services/api_service.dart';
+import '../utils/italian_date_picker.dart';
+import '../utils/date_formats.dart';
 
 class CaseDetailEditScreen extends StatelessWidget {
   final String caseId;
@@ -157,7 +159,7 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
                   child: const Row(children: [
                     Icon(Icons.restart_alt, size: 18),
                     SizedBox(width: 4),
-                    Text('Reset')
+                    Text('Reimposta')
                   ]),
                 ),
                 TextButton(
@@ -332,11 +334,12 @@ class _EditableFieldsCard extends StatelessWidget {
               onTap: () async {
                 final initial = s.nextDeadline ??
                     DateTime.now().add(const Duration(days: 1));
-                final picked = await showDatePicker(
-                  context: context,
+                final picked = await pickItalianDate(
+                  context,
                   initialDate: initial,
                   firstDate: DateTime(DateTime.now().year - 1),
                   lastDate: DateTime(DateTime.now().year + 5),
+                  helpText: 'Prossima scadenza',
                 );
                 if (picked != null) bloc.add(EditNextDeadline(picked));
               },
@@ -348,7 +351,7 @@ class _EditableFieldsCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(s.nextDeadline == null
                       ? '—'
-                      : DateFormat('dd/MM/yyyy').format(s.nextDeadline!))
+                      : AppDateFormats.date.format(s.nextDeadline!))
                 ]),
               ),
             ),
@@ -622,11 +625,12 @@ class _EditablePaymentsCard extends StatelessWidget {
                           const SizedBox(height: 12),
                           InkWell(
                             onTap: () async {
-                              final pd = await showDatePicker(
-                                  context: ctx,
+                              final pd = await pickItalianDate(
+                                  ctx,
                                   initialDate: picked,
                                   firstDate: DateTime(DateTime.now().year - 1),
-                                  lastDate: DateTime(DateTime.now().year + 5));
+                                  lastDate: DateTime(DateTime.now().year + 5),
+                                  helpText: 'Data pagamento');
                               if (pd != null)
                                 setState(() => picked =
                                     DateTime(pd.year, pd.month, pd.day));
@@ -688,7 +692,7 @@ class _EditablePaymentsTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fmtDate = DateFormat('dd/MM/yyyy');
+    final fmtDate = AppDateFormats.date; // centralizzato
     final fmtAmt = NumberFormat('#,##0.00', 'it_IT');
     return DataTable(
       columns: const [
@@ -798,11 +802,13 @@ class _InstallmentPlanCard extends StatelessWidget {
                     width: 360,
                     child: InkWell(
                       onTap: () async {
-                        final picked = await showDatePicker(
-                            context: ctx,
+                        final picked = await pickItalianDate(
+                            ctx,
                             initialDate: newDate,
                             firstDate: DateTime(DateTime.now().year - 1),
-                            lastDate: DateTime(DateTime.now().year + 5));
+                            lastDate: DateTime(DateTime.now().year + 5),
+                            helpText: 'Nuova scadenza',
+                        );
                         if (picked != null)
                           setState(() => newDate =
                               DateTime(picked.year, picked.month, picked.day));
@@ -877,8 +883,8 @@ class _InstallmentPlanCard extends StatelessWidget {
               }
 
               Future<void> pick() async {
-                final p = await showDatePicker(
-                    context: ctx,
+                final p = await pickItalianDate(
+                    ctx,
                     initialDate: firstDue,
                     firstDate: DateTime(DateTime.now().year - 1),
                     lastDate: DateTime(DateTime.now().year + 5),
@@ -1007,7 +1013,7 @@ class _InstallmentsTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fmtDate = DateFormat('dd/MM/yyyy');
+    final fmtDate = AppDateFormats.date; // centralizzato
     final fmtAmt = NumberFormat('#,##0.00', 'it_IT');
     // Calcolo importi arrotondati all'intero per visualizzazione readonly
     final n = installments.length;

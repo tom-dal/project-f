@@ -9,6 +9,8 @@ import '../models/installment.dart';
 import '../blocs/case_detail/case_detail_bloc.dart';
 import '../services/api_service.dart';
 import '../utils/amount_validator.dart';
+import '../utils/italian_date_picker.dart';
+import '../utils/date_formats.dart';
 import 'case_detail_edit_screen.dart';
 
 class CaseDetailReadOnlyScreen extends StatelessWidget {
@@ -151,30 +153,12 @@ class _CaseDetailReadOnlyViewState extends State<_CaseDetailReadOnlyView> {
           String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2,'0')}/${d.month.toString().padLeft(2,'0')}/${d.year}';
 
           Future<void> _pickDate() async {
-            final now = DateTime.now();
-            final picked = await showDatePicker(
-              context: ctx,
+            final picked = await pickItalianDate(
+              ctx,
               initialDate: selectedDate,
-              firstDate: DateTime(now.year - 1),
-              lastDate: DateTime(now.year + 5),
-              locale: const Locale('it', 'IT'), // USER PREFERENCE: Italian locale
+              firstDate: DateTime(DateTime.now().year - 1),
+              lastDate: DateTime(DateTime.now().year + 5),
               helpText: 'Data pagamento',
-              builder: (context, child) {
-                final theme = Theme.of(context);
-                return Theme(
-                  data: theme.copyWith(
-                    colorScheme: theme.colorScheme.copyWith(
-                      primary: theme.colorScheme.primary,
-                      surface: theme.colorScheme.surface,
-                      secondary: theme.colorScheme.secondary,
-                    ),
-                    datePickerTheme: const DatePickerThemeData(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(20))),
-                    ),
-                  ),
-                  child: child ?? const SizedBox.shrink(),
-                );
-              },
             );
             if (picked != null) {
               setState(() => selectedDate = DateTime(picked.year, picked.month, picked.day));
@@ -367,30 +351,12 @@ class _CaseDetailReadOnlyViewState extends State<_CaseDetailReadOnlyView> {
           }
 
             Future<void> _pickDate() async {
-              final now = DateTime.now();
-              final picked = await showDatePicker(
-                context: ctx,
+              final picked = await pickItalianDate(
+                ctx,
                 initialDate: firstDueDate,
-                firstDate: DateTime(now.year - 1),
-                lastDate: DateTime(now.year + 5),
-                locale: const Locale('it','IT'),
+                firstDate: DateTime(DateTime.now().year - 1),
+                lastDate: DateTime(DateTime.now().year + 5),
                 helpText: 'Prima scadenza',
-                builder: (context, child){
-                  final theme = Theme.of(context);
-                  return Theme(
-                    data: theme.copyWith(
-                      colorScheme: theme.colorScheme.copyWith(
-                        primary: theme.colorScheme.primary,
-                        surface: theme.colorScheme.surface,
-                        secondary: theme.colorScheme.secondary,
-                      ),
-                      datePickerTheme: const DatePickerThemeData(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(20))),
-                      ),
-                    ),
-                    child: child ?? const SizedBox.shrink(),
-                  );
-                }
               );
               if (picked != null) {
                 setState((){ firstDueDate = DateTime(picked.year, picked.month, picked.day); userPickedDate = true; });
@@ -548,30 +514,12 @@ class _CaseDetailReadOnlyViewState extends State<_CaseDetailReadOnlyView> {
         return StatefulBuilder(builder: (ctx,setState){
           String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2,'0')}/${d.month.toString().padLeft(2,'0')}/${d.year}';
           Future<void> _pickDate() async {
-            final now = DateTime.now();
-            final picked = await showDatePicker(
-              context: ctx,
+            final picked = await pickItalianDate(
+              ctx,
               initialDate: selectedDate,
-              firstDate: DateTime(now.year - 1),
-              lastDate: DateTime(now.year + 5),
-              locale: const Locale('it','IT'),
+              firstDate: DateTime(DateTime.now().year - 1),
+              lastDate: DateTime(DateTime.now().year + 5),
               helpText: 'Data pagamento rata',
-              builder: (context, child){
-                final theme = Theme.of(context);
-                return Theme(
-                  data: theme.copyWith(
-                    colorScheme: theme.colorScheme.copyWith(
-                      primary: theme.colorScheme.primary,
-                      surface: theme.colorScheme.surface,
-                      secondary: theme.colorScheme.secondary,
-                    ),
-                    datePickerTheme: const DatePickerThemeData(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(20))),
-                    ),
-                  ),
-                  child: child ?? const SizedBox.shrink(),
-                );
-              }
             );
             if (picked != null) setState(()=> selectedDate = DateTime(picked.year, picked.month, picked.day));
           }
@@ -909,7 +857,7 @@ class _PaymentsTable extends StatelessWidget {
   const _PaymentsTable({required this.payments});
   @override
   Widget build(BuildContext context) {
-    final fmt = DateFormat('dd/MM/yyyy'); // FIX: was NumberFormat causing isNegative on DateTime
+    final fmt = AppDateFormats.date; // centralizzato
     final fmtAmount = NumberFormat('#,##0.00', 'it_IT');
     final maxRowsNoScroll = 10;
     final rows = payments.mapIndexed((index, p){
@@ -1100,7 +1048,7 @@ class _InstallmentsSideCard extends StatelessWidget {
       );
     }
     final list = s.localInstallments.values.toList()..sort((a,b)=>a.dueDate.compareTo(b.dueDate));
-    final fmt = DateFormat('dd/MM/yyyy');
+    final fmt = AppDateFormats.date; // centralizzato
     const maxRows = 10;
     final rows = list.map((i) => DataRow(cells: [
       DataCell(Text(i.installmentNumber.toString())),
@@ -1170,4 +1118,3 @@ class _InstallmentsSideCard extends StatelessWidget {
     );
   }
 }
-

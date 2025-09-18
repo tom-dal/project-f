@@ -122,8 +122,8 @@ class DebtCollectionApp extends StatelessWidget {
           apiService: apiService,
         ),
         child: MaterialApp(
-          title: 'Debt Collection Manager',
-          // Rimossa locale forzata: usa locale di sistema
+          title: 'Gestione Recupero Crediti',
+          locale: const Locale('it','IT'), // USER PREFERENCE: forzato italiano
           localizationsDelegates: [
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
