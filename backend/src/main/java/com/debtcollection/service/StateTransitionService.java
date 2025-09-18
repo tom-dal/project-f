@@ -12,7 +12,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
@@ -36,7 +36,6 @@ public class StateTransitionService {
         cache.forEach((state, config) -> log.info("from_state={} to_state={} days={}", state, config.getToState(), config.getDaysToTransition()));
     }
 
-    // DEBUG: log state transitions at bean initialization
     @PostConstruct
     public void logTransitionsAtStartup() {
         log.info("[DEBUG] StateTransitionService @PostConstruct - Checking state_transition_config content");
@@ -54,7 +53,6 @@ public class StateTransitionService {
         if(fromState == CaseState.COMPLETATA) {
             return LocalDate.MAX;
         }
-        // CUSTOM IMPLEMENTATION: Auto-refresh cache if repository size changed (e.g. tests reseeding configs)
         try {
             long repoCount = stateTransitionConfigRepository.count();
             if (repoCount > 0 && repoCount != cache.size()) {
@@ -72,4 +70,28 @@ public class StateTransitionService {
         return lastStateDate.toLocalDate().plusDays(config.getDaysToTransition());
     }
 
+    public List<StateTransitionConfig> listAllConfigs() {
+        return stateTransitionConfigRepository.findAll();
+    }
+
+    public List<StateTransitionConfig> updateDaysBulk(Map<CaseState, Integer> updates) {
+        if (updates == null || updates.isEmpty()) {
+            return listAllConfigs();
+        }
+        List<StateTransitionConfig> toSave = new ArrayList<>();
+        updates.forEach((fromState, days) -> {
+            if (days == null || days <= 0) {
+                throw new IllegalArgumentException("daysToTransition must be > 0 for state " + fromState);
+            }
+            StateTransitionConfig existing = stateTransitionConfigRepository.findByFromState(fromState);
+            if (existing == null) {
+                throw new IllegalArgumentException("No configuration found for fromState " + fromState);
+            }
+            existing.setDaysToTransition(days);
+            toSave.add(existing);
+        });
+        stateTransitionConfigRepository.saveAll(toSave);
+        refreshCache();
+        return listAllConfigs();
+    }
 }

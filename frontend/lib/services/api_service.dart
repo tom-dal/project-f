@@ -6,6 +6,7 @@ import '../models/debt_case.dart';
 import '../models/case_state.dart';
 import '../models/hateoas_response.dart';
 import '../models/cases_summary.dart';
+import '../models/state_transition_config.dart';
 import 'config_service.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -1357,6 +1358,77 @@ class ApiService {
         throw 'Sessione scaduta. Effettua nuovamente il login.';
       }
       throw e.message ?? 'Errore rete eliminazione pagamento';
+    }
+  }
+
+  Future<bool> isAdmin() async {
+    try {
+      final token = await getStoredToken();
+      if (token == null) return false;
+      final parts = token.split('.');
+      if (parts.length != 3) return false;
+      var payload = parts[1];
+      while (payload.length % 4 != 0) { payload += '='; }
+      final decoded = utf8.decode(base64Url.decode(payload));
+      final map = jsonDecode(decoded);
+      final rolesString = map['roles'];
+      if (rolesString is String) {
+        return rolesString.split(',').any((r)=>r.trim() == 'ROLE_ADMIN');
+      }
+      return false;
+    } catch (_) { return false; }
+  }
+
+  Future<List<StateTransitionConfigModel>> getStateTransitions() async {
+    try {
+      final response = await _dio.get('/state-transitions', options: Options(validateStatus: (s)=>true));
+      if (response.statusCode == 200) {
+        final data = response.data as List;
+        return data.map((e)=>StateTransitionConfigModel.fromJson(e as Map<String,dynamic>)).toList();
+      } else if (response.statusCode == 403) {
+        throw 'Accesso negato';
+      } else if (response.statusCode == 401) {
+        await _handleUnauthorizedSafely('/state-transitions');
+        throw 'Sessione scaduta';
+      } else {
+        if (response.data is Map) {
+          throw response.data['message'] ?? 'Errore nel caricamento configurazioni';
+        }
+        throw 'Errore nel caricamento configurazioni';
+      }
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        await _handleUnauthorizedSafely('/state-transitions');
+        throw 'Sessione scaduta';
+      }
+      rethrow;
+    }
+  }
+
+  Future<List<StateTransitionConfigModel>> updateStateTransitions(List<StateTransitionConfigModel> list) async {
+    try {
+      final payload = list.map((e)=>{'fromState': e.fromStateString, 'daysToTransition': e.daysToTransition}).toList();
+      final response = await _dio.put('/state-transitions', data: payload, options: Options(validateStatus: (s)=>true));
+      if (response.statusCode == 200) {
+        final data = response.data as List;
+        return data.map((e)=>StateTransitionConfigModel.fromJson(e as Map<String,dynamic>)).toList();
+      } else if (response.statusCode == 400) {
+        if (response.data is Map) throw response.data['message'] ?? 'Dati non validi';
+        throw 'Dati non validi';
+      } else if (response.statusCode == 403) {
+        throw 'Accesso negato';
+      } else if (response.statusCode == 401) {
+        await _handleUnauthorizedSafely('/state-transitions');
+        throw 'Sessione scaduta';
+      } else {
+        throw 'Errore salvataggio configurazioni';
+      }
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        await _handleUnauthorizedSafely('/state-transitions');
+        throw 'Sessione scaduta';
+      }
+      rethrow;
     }
   }
 }

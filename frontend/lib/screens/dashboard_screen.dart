@@ -10,6 +10,9 @@ import '../widgets/cases_summary_section.dart';
 import '../widgets/cases_table.dart';
 import 'case_detail_read_only_screen.dart';
 import '../utils/date_formats.dart';
+import '../services/api_service.dart';
+import '../blocs/state_transitions/state_transitions_bloc.dart';
+import 'admin_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -29,6 +32,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _sortField = 'nextDeadlineDate';
   String _sortDirection = 'asc';
   bool _isRefreshing = false;
+  bool _isAdmin = false; // admin flag
 
   // Sticky layout constants
   static const double _kFiltersHeight = 60;
@@ -37,7 +41,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double get _stickyTotalHeight => _kFiltersHeight + _kPageBarHeight + _kHeaderHeight;
 
   @override
-  void initState() { super.initState(); _loadCases(); WidgetsBinding.instance.addPostFrameCallback((_) { if (!mounted) return; context.read<CasesSummaryBloc>().add(LoadCasesSummary()); }); }
+  void initState() {
+    super.initState();
+    _loadCases();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      context.read<CasesSummaryBloc>().add(LoadCasesSummary());
+      // check admin
+      final isAdmin = await context.read<ApiService>().isAdmin();
+      if(mounted){ setState(()=>_isAdmin = isAdmin); }
+    });
+  }
 
   void _loadCases({bool fullLoading = true}) {
     final String? sortParam = _sortField != null ? '$_sortField,$_sortDirection' : null;
@@ -163,7 +177,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
         backgroundColor: const Color(0xFF2C3E8C),
         title: const Text('Gestione Recupero Crediti', style: TextStyle(color: Colors.white)),
         actions: [
-          FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFF2C3E8C)), onPressed: _showCreateCaseDialog, child: const Text('Nuova Pratica')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFF2C3E8C)),
+            onPressed: _showCreateCaseDialog,
+            child: const Text('Nuova Pratica'),
+          ),
+          if(_isAdmin) ...[
+            const SizedBox(width:16),
+            OutlinedButton(
+              style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white)),
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => BlocProvider(
+                      create: (ctx)=> StateTransitionsBloc(context.read<ApiService>())..add(LoadStateTransitions()),
+                      child: const AdminScreen(),
+                    ),
+                  ),
+                );
+              },
+              child: const Text('Gestisci'),
+            ),
+          ],
           const SizedBox(width:24),
         ],
       ),

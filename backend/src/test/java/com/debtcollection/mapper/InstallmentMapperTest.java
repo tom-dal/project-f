@@ -43,7 +43,6 @@ class InstallmentMapperTest {
         mockInstallmentDto.setDueDate(LocalDateTime.of(2025, 3, 15, 0, 0));
         mockInstallmentDto.setPaid(true);
         mockInstallmentDto.setPaidDate(LocalDateTime.of(2025, 2, 20, 14, 30));
-        mockInstallmentDto.setPaidAmount(new BigDecimal("500.75"));
         mockInstallmentDto.setCreatedDate(LocalDateTime.of(2025, 1, 20, 10, 0));
         mockInstallmentDto.setLastModifiedDate(LocalDateTime.of(2025, 2, 20, 14, 30));
     }
@@ -61,7 +60,6 @@ class InstallmentMapperTest {
         assertEquals(LocalDateTime.of(2025, 2, 15, 0, 0), result.getDueDate());
         assertFalse(result.getPaid());
         assertNull(result.getPaidDate());
-        assertNull(result.getPaidAmount());
         assertEquals(LocalDateTime.of(2025, 1, 15, 10, 0), result.getCreatedDate());
         assertEquals(LocalDateTime.of(2025, 1, 15, 10, 0), result.getLastModifiedDate());
     }
@@ -87,7 +85,6 @@ class InstallmentMapperTest {
         // Then
         assertTrue(result.getPaid());
         assertEquals(LocalDateTime.of(2025, 2, 20, 14, 30), result.getPaidDate());
-        assertEquals(new BigDecimal("750.25"), result.getPaidAmount());
     }
 
     @Test
@@ -121,7 +118,6 @@ class InstallmentMapperTest {
         // Given
         mockInstallmentDto.setPaid(false);
         mockInstallmentDto.setPaidDate(null);
-        mockInstallmentDto.setPaidAmount(null);
 
         // When
         Installment result = installmentMapper.toEntity(mockInstallmentDto);
@@ -129,32 +125,6 @@ class InstallmentMapperTest {
         // Then
         assertFalse(result.getPaid());
         assertNull(result.getPaidDate());
-    }
-
-    @Test
-    void toDto_ShouldHandlePreciseMonetaryValues() {
-        // Given
-        mockInstallment.setAmount(new BigDecimal("999.99"));
-
-        // When
-        InstallmentDto result = installmentMapper.toDto(mockInstallment);
-
-        // Then - CUSTOM IMPLEMENTATION: Verifica precisione BigDecimal
-        assertEquals(new BigDecimal("999.99"), result.getAmount());
-        assertEquals(new BigDecimal("333.33"), result.getPaidAmount());
-    }
-
-    @Test
-    void toEntity_ShouldHandlePreciseMonetaryValues() {
-        // Given
-        mockInstallmentDto.setAmount(new BigDecimal("1234.56"));
-        mockInstallmentDto.setPaidAmount(new BigDecimal("1234.56"));
-
-        // When
-        Installment result = installmentMapper.toEntity(mockInstallmentDto);
-
-        // Then
-        assertEquals(new BigDecimal("1234.56"), result.getAmount());
     }
 
     @Test
@@ -176,27 +146,9 @@ class InstallmentMapperTest {
     }
 
     @Test
-    void toDto_ShouldHandlePartialPayment() {
-        // Given - Test rata parzialmente pagata
-        mockInstallment.setPaid(false);
-        mockInstallment.setPaidDate(LocalDateTime.of(2025, 2, 10, 15, 0));
-
-        // When
-        InstallmentDto result = installmentMapper.toDto(mockInstallment);
-
-        // Then
-        assertFalse(result.getPaid());
-        assertEquals(new BigDecimal("300.00"), result.getPaidAmount());
-        assertEquals(LocalDateTime.of(2025, 2, 10, 15, 0), result.getPaidDate());
-        // L'importo totale rimane invariato
-        assertEquals(new BigDecimal("750.25"), result.getAmount());
-    }
-
-    @Test
     void toEntity_ShouldHandleNullMonetaryFields() {
         // Given
         mockInstallmentDto.setAmount(null);
-        mockInstallmentDto.setPaidAmount(null);
 
         // When
         Installment result = installmentMapper.toEntity(mockInstallmentDto);

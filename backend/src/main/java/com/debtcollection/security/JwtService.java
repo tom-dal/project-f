@@ -8,6 +8,7 @@ import io.jsonwebtoken.security.Keys;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
@@ -16,6 +17,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class JwtService {
@@ -27,6 +29,7 @@ public class JwtService {
     private long jwtExpiration;
 
     private static final String CLAIM_PASSWORD_CHANGE = "password_change";
+    private static final String CLAIM_ROLES = "roles";
 
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
@@ -42,9 +45,17 @@ public class JwtService {
     }
 
     public String generateToken(Map<String, Object> extraClaims, UserDetails userDetails) {
+        // Ensure roles claim is present for frontend admin detection
+        Map<String, Object> claims = new HashMap<>(extraClaims);
+        if (!claims.containsKey(CLAIM_ROLES)) {
+            String roles = userDetails.getAuthorities().stream()
+                    .map(GrantedAuthority::getAuthority)
+                    .collect(Collectors.joining(","));
+            claims.put(CLAIM_ROLES, roles);
+        }
         return Jwts
                 .builder()
-                .setClaims(extraClaims)
+                .setClaims(claims)
                 .setSubject(userDetails.getUsername())
                 .setIssuedAt(new Date(System.currentTimeMillis()))
                 .setExpiration(new Date(System.currentTimeMillis() + jwtExpiration))
@@ -88,6 +99,11 @@ public class JwtService {
     public String generatePasswordChangeToken(UserDetails userDetails) {
         Map<String, Object> claims = new HashMap<>();
         claims.put(CLAIM_PASSWORD_CHANGE, true);
+        // Include roles also in limited token so frontend can still know admin capabilities
+        String roles = userDetails.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .collect(Collectors.joining(","));
+        claims.put(CLAIM_ROLES, roles);
         return Jwts
                 .builder()
                 .setClaims(claims)

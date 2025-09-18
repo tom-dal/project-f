@@ -16,7 +16,6 @@ public class InstallmentDto {
     private LocalDateTime dueDate;
     private Boolean paid;
     private LocalDateTime paidDate;
-    private BigDecimal paidAmount;
     private LocalDateTime createdDate;
     private LocalDateTime lastModifiedDate;
 }

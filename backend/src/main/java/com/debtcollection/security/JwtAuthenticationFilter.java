@@ -11,6 +11,9 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import com.debtcollection.service.UserService;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 
 import java.io.IOException;
 
@@ -20,6 +23,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Autowired
     private JwtTokenProvider tokenProvider;
+    @Autowired
+    private UserService userService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -49,8 +54,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     }
                     log.info("✅ JWT FILTER - Password change token used for correct endpoint");
                 }
-                
                 Authentication authentication = tokenProvider.getAuthentication(jwt);
+                // CUSTOM IMPLEMENTATION: Fallback - if token has no authorities (e.g., legacy/limited token) load from DB
+                if (authentication.getAuthorities() == null || authentication.getAuthorities().isEmpty()) {
+                    try {
+                        UserDetails userDetails = userService.loadUserByUsername(authentication.getName());
+                        authentication = new UsernamePasswordAuthenticationToken(userDetails, authentication.getCredentials(), userDetails.getAuthorities());
+                        log.info("[FALLBACK] Loaded authorities from DB for user {} -> {}", userDetails.getUsername(), userDetails.getAuthorities());
+                    } catch (Exception ex) {
+                        log.warn("[FALLBACK] Unable to load user details for {}: {}", authentication.getName(), ex.getMessage());
+                    }
+                }
                 SecurityContextHolder.getContext().setAuthentication(authentication);
                 log.info("🔐 JWT FILTER - Authentication set in security context: {}", authentication.getName());
             } else if (jwt != null) {

@@ -36,14 +36,14 @@ public class StateTransitionDataInitializer implements ApplicationRunner {
         }
 
         Map<CaseState, TransitionDef> defaults = new LinkedHashMap<>();
-        defaults.put(CaseState.MESSA_IN_MORA_DA_FARE, new TransitionDef(CaseState.MESSA_IN_MORA_INVIATA, 5));
-        defaults.put(CaseState.MESSA_IN_MORA_INVIATA, new TransitionDef(CaseState.DEPOSITO_RICORSO, 30));
-        defaults.put(CaseState.DEPOSITO_RICORSO, new TransitionDef(CaseState.DECRETO_INGIUNTIVO_DA_NOTIFICARE, 20));
-        defaults.put(CaseState.DECRETO_INGIUNTIVO_DA_NOTIFICARE, new TransitionDef(CaseState.DECRETO_INGIUNTIVO_NOTIFICATO, 15));
-        defaults.put(CaseState.DECRETO_INGIUNTIVO_NOTIFICATO, new TransitionDef(CaseState.CONTESTAZIONE_DA_RISCONTRARE, 30));
-        defaults.put(CaseState.CONTESTAZIONE_DA_RISCONTRARE, new TransitionDef(CaseState.PIGNORAMENTO, 45));
-        defaults.put(CaseState.PIGNORAMENTO, new TransitionDef(CaseState.PRECETTO, 60));
-        defaults.put(CaseState.PRECETTO, new TransitionDef(CaseState.COMPLETATA, 30));
+        defaults.put(CaseState.MESSA_IN_MORA_DA_FARE, new TransitionDef(CaseState.MESSA_IN_MORA_INVIATA, 10));
+        defaults.put(CaseState.MESSA_IN_MORA_INVIATA, new TransitionDef(CaseState.DEPOSITO_RICORSO, 10));
+        defaults.put(CaseState.DEPOSITO_RICORSO, new TransitionDef(CaseState.DECRETO_INGIUNTIVO_DA_NOTIFICARE, 10));
+        defaults.put(CaseState.DECRETO_INGIUNTIVO_DA_NOTIFICARE, new TransitionDef(CaseState.DECRETO_INGIUNTIVO_NOTIFICATO, 10));
+        defaults.put(CaseState.DECRETO_INGIUNTIVO_NOTIFICATO, new TransitionDef(CaseState.CONTESTAZIONE_DA_RISCONTRARE, 10));
+        defaults.put(CaseState.CONTESTAZIONE_DA_RISCONTRARE, new TransitionDef(CaseState.PIGNORAMENTO, 10));
+        defaults.put(CaseState.PIGNORAMENTO, new TransitionDef(CaseState.PRECETTO, 10));
+        defaults.put(CaseState.PRECETTO, new TransitionDef(CaseState.COMPLETATA, 10));
 
         int created = 0;
         for (Map.Entry<CaseState, TransitionDef> e : defaults.entrySet()) {
