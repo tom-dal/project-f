@@ -113,12 +113,20 @@ class _CaseDetailReadOnlyViewState extends State<_CaseDetailReadOnlyView> {
     );
   }
 
-  void _openEdit(BuildContext context, CaseDetailLoaded s) {
-    Navigator.of(context).push(
+  void _openEdit(BuildContext context, CaseDetailLoaded s) async {
+    final result = await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => CaseDetailEditScreen(caseId: s.caseData.id, initialCase: s.caseData),
       ),
     );
+    debugPrint('[READONLY] Returned from edit with result: $result');
+    bool shouldRefresh = false;
+    if (result == 'refresh') shouldRefresh = true;
+    else if (result is bool && result) shouldRefresh = true;
+    else if (result is Map && (result['refresh'] == true)) shouldRefresh = true;
+    if (shouldRefresh) {
+      context.read<CaseDetailBloc>().add(LoadCaseDetail(s.caseData.id));
+    }
   }
 
   void _openRegisterPaymentDialog(CaseDetailLoaded s) {

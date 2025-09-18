@@ -44,6 +44,7 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
   final NumberFormat _fmt = NumberFormat('#,##0.00', 'it_IT');
   bool _wasSaving = false;
   bool _initialLoaded = false;
+  bool _shouldRefresh = false; // per gestire back system
 
   @override
   void initState() {
@@ -75,151 +76,173 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocConsumer<CaseDetailBloc, CaseDetailState>(
-      listener: (context, state) {
-        if (state is CaseDetailLoaded) {
-          if (_initialLoaded &&
-              _wasSaving &&
-              !state.saving &&
-              state.error == null &&
-              state.successMessage != null) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text(state.successMessage!),
-                duration: const Duration(seconds: 2)));
+    return WillPopScope(
+      onWillPop: () async {
+        if (_shouldRefresh) {
+          final st = context.read<CaseDetailBloc>().state;
+          if (st is CaseDetailLoaded) {
+            Navigator.pop(context, {
+              'refresh': true,
+              'caseData': st.caseData.toJson(),
+            });
+          } else {
+            Navigator.pop(context, {'refresh': true});
           }
-          if (!_notesFocus.hasFocus) _notesCtrl.text = state.notes ?? '';
-          if (!_amountFocus.hasFocus) {
-            final f = _formatAmount(state.owedAmount);
-            if (_amountCtrl.text != f) {
-              _amountCtrl.value = TextEditingValue(
-                  text: f,
-                  selection: TextSelection.collapsed(offset: f.length));
-            }
-          }
-          _debtorCtrl.text = state.debtorName;
-          if (state.error != null) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text(state.error!),
-                backgroundColor: Colors.redAccent));
-          }
-          _wasSaving = state.saving;
-          _initialLoaded = true;
-        } else if (state is CaseDetailDeleted) {
-          context.read<DebtCaseBloc>().add(const LoadCasesPaginated());
-          if (mounted) Navigator.pop(context);
-        } else if (state is CaseDetailError) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text(state.message), backgroundColor: Colors.redAccent));
+          return false;
         }
+        return true;
       },
-      builder: (context, state) {
-        if (state is CaseDetailLoading) {
+      child: BlocConsumer<CaseDetailBloc, CaseDetailState>(
+        listener: (context, state) {
+          if (state is CaseDetailLoaded) {
+            if (_initialLoaded &&
+                _wasSaving &&
+                !state.saving &&
+                state.error == null &&
+                state.successMessage != null) {
+              _shouldRefresh = true;
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(state.successMessage!),
+                  duration: const Duration(milliseconds: 1200)));
+              if (mounted) Navigator.pop(context, {
+                'refresh': true,
+                'caseData': state.caseData.toJson(),
+              });
+            }
+            if (!_notesFocus.hasFocus) _notesCtrl.text = state.notes ?? '';
+            if (!_amountFocus.hasFocus) {
+              final f = _formatAmount(state.owedAmount);
+              if (_amountCtrl.text != f) {
+                _amountCtrl.value = TextEditingValue(
+                    text: f,
+                    selection: TextSelection.collapsed(offset: f.length));
+              }
+            }
+            _debtorCtrl.text = state.debtorName;
+            if (state.error != null) {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(state.error!),
+                  backgroundColor: Colors.redAccent));
+            }
+            _wasSaving = state.saving;
+            _initialLoaded = true;
+          } else if (state is CaseDetailDeleted) {
+            context.read<DebtCaseBloc>().add(const LoadCasesPaginated());
+            if (mounted) Navigator.pop(context);
+          } else if (state is CaseDetailError) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text(state.message), backgroundColor: Colors.redAccent));
+          }
+        },
+        builder: (context, state) {
+          if (state is CaseDetailLoading) {
+            return Scaffold(
+                appBar: AppBar(title: const Text('Dettaglio Pratica')),
+                body: const Center(child: CircularProgressIndicator()));
+          }
+          if (state is CaseDetailError) {
+            return Scaffold(
+                appBar: AppBar(title: const Text('Dettaglio Pratica')),
+                body: Center(child: Text('Errore: ${state.message}')));
+          }
+          final s = state as CaseDetailLoaded;
           return Scaffold(
-              appBar: AppBar(title: const Text('Dettaglio Pratica')),
-              body: const Center(child: CircularProgressIndicator()));
-        }
-        if (state is CaseDetailError) {
-          return Scaffold(
-              appBar: AppBar(title: const Text('Dettaglio Pratica')),
-              body: Center(child: Text('Errore: ${state.message}')));
-        }
-        final s = state as CaseDetailLoaded;
-        return Scaffold(
-          appBar: AppBar(
-            title: Text('Pratica ${s.caseData.id.substring(0, 6)}'),
-            actions: [
-              TextButton(
-                onPressed: (s.dirty && !s.saving)
-                    ? () => context.read<CaseDetailBloc>().add(ResetCaseEdits())
-                    : null,
-                child: const Row(children: [
-                  Icon(Icons.restart_alt, size: 18),
-                  SizedBox(width: 4),
-                  Text('Reset')
-                ]),
-              ),
-              TextButton(
-                onPressed: (s.dirty && !s.saving)
-                    ? () {
-                        if (_formKey.currentState?.validate() ?? false)
-                          context.read<CaseDetailBloc>().add(SaveCaseEdits());
-                      }
-                    : null,
-                style: TextButton.styleFrom(
-                  backgroundColor: (s.dirty && !s.saving)
-                      ? Theme.of(context).colorScheme.primary
-                      : Colors.transparent,
-                  foregroundColor: (s.dirty && !s.saving)
-                      ? Theme.of(context).colorScheme.onPrimary
-                      : Theme.of(context).disabledColor,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18)),
+            appBar: AppBar(
+              title: Text('Pratica ${s.caseData.id.substring(0, 6)}'),
+              actions: [
+                TextButton(
+                  onPressed: (s.dirty && !s.saving)
+                      ? () => context.read<CaseDetailBloc>().add(ResetCaseEdits())
+                      : null,
+                  child: const Row(children: [
+                    Icon(Icons.restart_alt, size: 18),
+                    SizedBox(width: 4),
+                    Text('Reset')
+                  ]),
                 ),
-                child: const Row(children: [
-                  Icon(Icons.save, size: 18),
-                  SizedBox(width: 6),
-                  Text('Salva')
-                ]),
-              ),
-            ],
-            bottom: s.saving
-                ? const PreferredSize(
-                    preferredSize: Size.fromHeight(3),
-                    child: LinearProgressIndicator(minHeight: 3))
-                : null,
-          ),
-          body: Form(
-            key: _formKey,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1200),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        flex: 3,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _EditableFieldsCard(
-                                s: s,
-                                debtorCtrl: _debtorCtrl,
-                                amountCtrl: _amountCtrl,
-                                amountFocus: _amountFocus,
-                                bloc: context.read<CaseDetailBloc>()),
-                            const SizedBox(height: 28),
-                            _NotesCard(
-                                s: s,
-                                notesCtrl: _notesCtrl,
-                                notesFocus: _notesFocus,
-                                bloc: context.read<CaseDetailBloc>()),
-                          ],
+                TextButton(
+                  onPressed: (s.dirty && !s.saving)
+                      ? () {
+                          if (_formKey.currentState?.validate() ?? false)
+                            context.read<CaseDetailBloc>().add(SaveCaseEdits());
+                        }
+                      : null,
+                  style: TextButton.styleFrom(
+                    backgroundColor: (s.dirty && !s.saving)
+                        ? Theme.of(context).colorScheme.primary
+                        : Colors.transparent,
+                    foregroundColor: (s.dirty && !s.saving)
+                        ? Theme.of(context).colorScheme.onPrimary
+                        : Theme.of(context).disabledColor,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18)),
+                  ),
+                  child: const Row(children: [
+                    Icon(Icons.save, size: 18),
+                    SizedBox(width: 6),
+                    Text('Salva')
+                  ]),
+                ),
+              ],
+              bottom: s.saving
+                  ? const PreferredSize(
+                      preferredSize: Size.fromHeight(3),
+                      child: LinearProgressIndicator(minHeight: 3))
+                  : null,
+            ),
+            body: Form(
+              key: _formKey,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1200),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _EditableFieldsCard(
+                                  s: s,
+                                  debtorCtrl: _debtorCtrl,
+                                  amountCtrl: _amountCtrl,
+                                  amountFocus: _amountFocus,
+                                  bloc: context.read<CaseDetailBloc>()),
+                              const SizedBox(height: 28),
+                              _NotesCard(
+                                  s: s,
+                                  notesCtrl: _notesCtrl,
+                                  notesFocus: _notesFocus,
+                                  bloc: context.read<CaseDetailBloc>()),
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 40),
-                      Expanded(
-                        flex: 3,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _EditablePaymentsCard(
-                                s: s, bloc: context.read<CaseDetailBloc>()),
-                            const SizedBox(height: 28),
-                            _InstallmentPlanCard(
-                                s: s, bloc: context.read<CaseDetailBloc>()),
-                          ],
+                        const SizedBox(width: 40),
+                        Expanded(
+                          flex: 3,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _EditablePaymentsCard(
+                                  s: s, bloc: context.read<CaseDetailBloc>()),
+                              const SizedBox(height: 28),
+                              _InstallmentPlanCard(
+                                  s: s, bloc: context.read<CaseDetailBloc>()),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
@@ -828,11 +851,12 @@ class _InstallmentPlanCard extends StatelessWidget {
     double floorAmt(double total, int n) {
       if (n <= 0) return 0;
       final raw = total / n;
-      return (raw * 100).floor() / 100.0;
+      return raw.floorToDouble(); // Arrotonda all'intero
     }
 
     double remainder(double total, double per, int n) {
-      return double.parse((total - per * n).toStringAsFixed(2));
+      // L'ultima rata compensa il resto, può avere decimali
+      return double.parse((total - per * (n - 1)).toStringAsFixed(2));
     }
 
     showDialog(
@@ -947,10 +971,9 @@ class _InstallmentPlanCard extends StatelessWidget {
                                     Text(_fmtDate(firstDue))
                                   ]))),
                           const SizedBox(height: 16),
-                          Text('Importo rata (floor): € ${fmt.format(per)}'),
+                          Text('Importo rata: € ${fmt.format(per)}'),
                           const SizedBox(height: 4),
-                          Text(
-                              'Resto ultima rata: € ${fmt.format(rem < 0 ? 0 : rem)}',
+                          Text('Importo ultima rata: € ${fmt.format(rem < 0 ? 0 : rem)}',
                               style: const TextStyle(color: Colors.black54)),
                           if (error != null)
                             Padding(
@@ -986,6 +1009,19 @@ class _InstallmentsTable extends StatelessWidget {
   Widget build(BuildContext context) {
     final fmtDate = DateFormat('dd/MM/yyyy');
     final fmtAmt = NumberFormat('#,##0.00', 'it_IT');
+    // Calcolo importi arrotondati all'intero per visualizzazione readonly
+    final n = installments.length;
+    final total = installments.fold<double>(0.0, (a, b) => a + b.amount);
+    double floorAmt(double total, int n) {
+      if (n <= 0) return 0;
+      final raw = total / n;
+      return raw.truncateToDouble(); // Arrotonda all'intero
+    }
+    double remainder(double total, double per, int n) {
+      return double.parse((total - per * (n - 1)).toStringAsFixed(2));
+    }
+    final per = floorAmt(total, n);
+    final rem = remainder(total, per, n);
     return DataTable(
       columns: const [
         DataColumn(label: Text('Importo')),
@@ -993,33 +1029,36 @@ class _InstallmentsTable extends StatelessWidget {
         DataColumn(label: Text('Stato')),
         DataColumn(label: Text('Azioni'))
       ],
-      rows: installments.map((i) {
-        final late = i.dueDate.isBefore(DateTime.now()) && i.paid != true;
-        final statusLabel = i.paid == true
+      rows: List.generate(n, (i) {
+        final inst = installments[i];
+        final late = inst.dueDate.isBefore(DateTime.now()) && inst.paid != true;
+        final statusLabel = inst.paid == true
             ? 'Pagata'
             : late
                 ? 'Scaduta'
                 : 'Da pagare';
-        final statusColor = i.paid == true
+        final statusColor = inst.paid == true
             ? Colors.green
             : late
                 ? Colors.red
                 : Colors.orange;
+        // Mostra importo arrotondato all'intero per tutte tranne l'ultima
+        final importo = (i < n - 1) ? per : rem;
         return DataRow(cells: [
-          DataCell(Text('€ ${fmtAmt.format(i.amount)}')),
-          DataCell(Text(fmtDate.format(i.dueDate))),
+          DataCell(Text('€ ${fmtAmt.format(importo)}')),
+          DataCell(Text(fmtDate.format(inst.dueDate))),
           DataCell(Text(statusLabel,
               style:
                   TextStyle(color: statusColor, fontWeight: FontWeight.w600))),
           DataCell(Row(children: [
-            if (i.paid != true)
+            if (inst.paid != true)
               IconButton(
                   tooltip: 'Modifica scadenza',
                   icon: const Icon(Icons.event, size: 18),
-                  onPressed: () => onEditDate(i))
+                  onPressed: () => onEditDate(inst))
           ])),
         ]);
-      }).toList(),
+      }),
       headingRowHeight: 36,
       dataRowMinHeight: 44,
       dataRowMaxHeight: 52,
