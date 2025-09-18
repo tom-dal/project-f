@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../blocs/state_transitions/state_transitions_bloc.dart';
 import '../models/state_transition_config.dart';
+import '../models/case_state.dart'; // Import for label getter
 
 /// Screen to manage state transition configuration
 class AdminScreen extends StatefulWidget {
@@ -14,6 +15,8 @@ class AdminScreen extends StatefulWidget {
 class _AdminScreenState extends State<AdminScreen> {
   final Map<String, TextEditingController> _controllers = {};
   final Map<String, String?> _errors = {}; // fromStateString -> error message
+  bool _wasSaving = false; // track previous saving state
+  bool _initialLoaded = false; // avoid showing 'Salvato' on first load
 
   @override
   void dispose() {
@@ -65,31 +68,71 @@ class _AdminScreenState extends State<AdminScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Configurazione Transizioni Stati'),
+        title: const Text('Pannello di amministrazione'),
         actions: [
-          IconButton(
-            tooltip: 'Ricarica',
-            onPressed: () => context.read<StateTransitionsBloc>().add(RefreshStateTransitions()),
-            icon: const Icon(Icons.refresh),
-          ),
-          IconButton(
-            tooltip: 'Chiudi',
-            onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.close),
+          BlocBuilder<StateTransitionsBloc, StateTransitionsState>(
+            builder: (context, state) {
+              if(state is StateTransitionsLoaded){
+                final canSave = state.dirty && !state.saving && !_hasLocalErrors();
+                final canReset = (state.dirty || _hasLocalErrors()) && !state.saving;
+                // NOTE: _wasSaving is updated in builder AFTER listener uses previous value
+                _wasSaving = state.saving;
+                return Row(
+                  children: [
+                    if(canReset)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: FilledButton.icon(
+                          onPressed: () {
+                            setState(() { _errors.clear(); });
+                            context.read<StateTransitionsBloc>().add(ResetStateTransitions());
+                          },
+                          icon: const Icon(Icons.restart_alt, size: 18, ),
+                          label: const Text('Reimposta'),
+                        ),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8, left: 4),
+                      child: FilledButton.icon(
+                        onPressed: canSave ? () => context.read<StateTransitionsBloc>().add(SaveStateTransitions()) : null,
+                        icon: state.saving
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                              )
+                            : const Icon(Icons.save),
+                        label: const Text('Salva'),
+                      ),
+                    ),
+                  ],
+                );
+              }
+              return const SizedBox.shrink();
+            },
           ),
         ],
       ),
       body: BlocConsumer<StateTransitionsBloc, StateTransitionsState>(
         listenWhen: (p,c)=> c is StateTransitionsLoaded || c is StateTransitionsError,
         listener: (context, state) {
-          if(state is StateTransitionsLoaded && state.error != null){
+          if(state is StateTransitionsLoaded){
+            if(!_initialLoaded){
+              _initialLoaded = true; // skip snack on first successful load
+              return;
+            }
+            if(state.error != null){
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(state.error!), backgroundColor: Colors.red.withAlpha(200)),
+              );
+            } else if(_wasSaving && !state.saving && !state.dirty && state.error == null){
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: const Text('Salvato'), backgroundColor: Colors.green.withAlpha(200), duration: const Duration(seconds: 1)),
+              );
+            }
+          } else if(state is StateTransitionsError){
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.error!), backgroundColor: Colors.red.withAlpha(200)),
-            );
-          } else if(state is StateTransitionsLoaded && !state.dirty && !state.saving){
-            // After successful save (dirty becomes false)
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: const Text('Salvato'), backgroundColor: Colors.green.withAlpha(200), duration: const Duration(seconds: 1)),
+              SnackBar(content: Text(state.message), backgroundColor: Colors.red.withAlpha(200)),
             );
           }
         },
@@ -108,8 +151,6 @@ class _AdminScreenState extends State<AdminScreen> {
                 _buildHeaderBar(state),
                 const Divider(height: 1),
                 Expanded(child: _buildList(state)),
-                const Divider(height: 1),
-                _buildActionsBar(state),
               ],
             );
           }
@@ -144,7 +185,7 @@ class _AdminScreenState extends State<AdminScreen> {
       alignment: Alignment.centerLeft,
       child: Row(
         children: [
-          Text('Configurazioni (${state.current.length})', style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text('Configurazione transizioni', style: const TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(width: 16),
           if(dirty) const _DirtyBadge(),
         ],
@@ -156,60 +197,56 @@ class _AdminScreenState extends State<AdminScreen> {
     if(state.current.isEmpty){
       return const Center(child: Text('Nessuna configurazione'));
     }
-    return ListView.separated(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: state.current.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 4),
-      itemBuilder: (context, index){
-        final cfg = state.current[index];
-        final original = state.original.firstWhere((o)=>o.fromStateString == cfg.fromStateString);
-        final modified = original.daysToTransition != cfg.daysToTransition;
-        final controller = _controllers[cfg.fromStateString]!;
-        final error = _errors[cfg.fromStateString];
-        return _ConfigRow(
-          cfg: cfg,
-          controller: controller,
-          modified: modified,
-          error: error,
-          enabled: !state.saving,
-          onChanged: (val)=> _onChanged(cfg.fromStateString, val, state),
-        );
-      },
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Colonna sinistra: cards compatte
+        Expanded(
+          flex: 0,
+          child: Container(
+            margin: const EdgeInsets.only(left: 32, top: 8, bottom: 8),
+            width: 650, // Regolabile
+            child: ListView.separated(
+              shrinkWrap: true,
+              physics: const AlwaysScrollableScrollPhysics(),
+              itemCount: state.current.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (context, index){
+                final cfg = state.current[index];
+                final original = state.original.firstWhere((o)=>o.fromStateString == cfg.fromStateString);
+                final modified = original.daysToTransition != cfg.daysToTransition;
+                final controller = _controllers[cfg.fromStateString]!;
+                final error = _errors[cfg.fromStateString];
+                return _ConfigRow(
+                  cfg: cfg,
+                  controller: controller,
+                  modified: modified,
+                  error: error,
+                  enabled: !state.saving,
+                  onChanged: (val)=> _onChanged(cfg.fromStateString, val, state),
+                );
+              },
+            ),
+          ),
+        ),
+        // Colonna destra: placeholder
+        Expanded(
+          child: Container(
+            margin: const EdgeInsets.only(left: 24, top: 8, right: 32, bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.grey.withAlpha(40),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            height: double.infinity,
+            child: const Center(
+              child: Text('Placeholder', style: TextStyle(color: Colors.grey, fontSize: 18)),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildActionsBar(StateTransitionsLoaded state){
-    final bloc = context.read<StateTransitionsBloc>();
-    final dirty = state.dirty;
-    final disabled = state.saving || _hasLocalErrors();
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16,8,16,16),
-      child: Row(
-        children: [
-          OutlinedButton(
-            onPressed: state.saving ? null : () => bloc.add(RefreshStateTransitions()),
-            child: const Text('Ricarica'),
-          ),
-          const SizedBox(width: 8),
-          OutlinedButton(
-            onPressed: (!dirty || state.saving) ? null : () => bloc.add(ResetStateTransitions()),
-            child: const Text('Annulla modifiche'),
-          ),
-          const SizedBox(width: 8),
-          OutlinedButton(
-            onPressed: state.saving ? null : () => Navigator.of(context).pop(),
-            child: const Text('Chiudi'),
-          ),
-          const Spacer(),
-          FilledButton.icon(
-            onPressed: (!dirty || disabled) ? null : () => bloc.add(SaveStateTransitions()),
-            icon: const Icon(Icons.save),
-            label: const Text('Salva'),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _ConfigRow extends StatelessWidget {
@@ -221,6 +258,13 @@ class _ConfigRow extends StatelessWidget {
   final ValueChanged<String> onChanged;
   const _ConfigRow({required this.cfg, required this.controller, required this.modified, required this.enabled, required this.error, required this.onChanged});
 
+  // Column layout constants
+  static const double _fromColWidth = 210;
+  static const double _arrowColWidth = 32;
+  static const double _toColWidth = 210;
+  static const double _daysEditorWidth = 120; // ridotto
+  static const double _daysFieldInnerWidth = 50; // ridotto
+
   Color? _background(){
     if(error != null){
       return Colors.red.withAlpha(20);
@@ -231,39 +275,89 @@ class _ConfigRow extends StatelessWidget {
     return null;
   }
 
+  void _changeDays(BuildContext context, int delta) {
+    final raw = controller.text.trim();
+    final current = int.tryParse(raw) ?? 1;
+    final next = (current + delta).clamp(1, 9999);
+    if (next != current) {
+      controller.text = next.toString();
+      onChanged(next.toString());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final fromLabel = cfg.fromState?.label ?? cfg.fromStateString;
+    final toLabel = cfg.toState?.label ?? cfg.toStateString;
+    final raw = controller.text.trim();
+    final value = int.tryParse(raw) ?? 1;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10), // ridotto
       decoration: BoxDecoration(
         color: _background(),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: error!=null ? Colors.red : (modified ? Colors.amber : Colors.grey.withAlpha(80))),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Expanded(
-            flex: 2,
-            child: Text(cfg.fromStateString, style: const TextStyle(fontWeight: FontWeight.w500)),
+          SizedBox(
+            width: _fromColWidth,
+            child: Text(fromLabel, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w500)),
           ),
-          Expanded(
-            flex: 2,
-            child: Text(cfg.toStateString),
+          SizedBox(
+            width: _arrowColWidth,
+            child: const Center(child: Icon(Icons.arrow_forward, size: 20, color: Colors.grey)),
           ),
-          Expanded(
-            flex: 2,
-            child: TextField(
-              controller: controller,
-              enabled: enabled,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: InputDecoration(
-                labelText: 'Giorni',
-                isDense: true,
-                errorText: error,
+          SizedBox(
+            width: _toColWidth,
+            child: Text(toLabel, overflow: TextOverflow.ellipsis),
+          ),
+          SizedBox(
+            width: _daysEditorWidth,
+            child: IntrinsicWidth(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    iconSize: 18,
+                    icon: const Icon(Icons.remove),
+                    tooltip: 'Diminuisci',
+                    onPressed: enabled && error == null && value > 1 ? () => _changeDays(context, -1) : null,
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  ),
+                  SizedBox(
+                    width: _daysFieldInnerWidth,
+                    child: TextField(
+                      controller: controller,
+                      enabled: enabled,
+                      textAlign: TextAlign.center,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: InputDecoration(
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+                        labelText: 'Giorni',
+                        labelStyle: const TextStyle(fontSize: 10),
+                        errorText: error,
+                      ),
+                      onChanged: onChanged,
+                    ),
+                  ),
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    iconSize: 18,
+                    icon: const Icon(Icons.add),
+                    tooltip: 'Aumenta',
+                    onPressed: enabled && error == null ? () => _changeDays(context, 1) : null,
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  ),
+                ],
               ),
-              onChanged: onChanged,
             ),
           ),
           const SizedBox(width: 8),
@@ -289,4 +383,3 @@ class _DirtyBadge extends StatelessWidget {
     );
   }
 }
-
