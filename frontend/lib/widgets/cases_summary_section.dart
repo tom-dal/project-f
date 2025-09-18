@@ -267,7 +267,7 @@ class _KpiChips extends StatelessWidget {
       _KpiData(id: 'ATTIVE', label: 'Pratiche attive', value: summary.totalActiveCases, color: Colors.blueGrey, active: _isActiveAttive(), onTap: _applyAttive),
       _KpiData(id: 'OVERDUE', label: 'Pratiche scadute', value: summary.overdue, color: Colors.red.shade500, active: _isActiveOverdue(), onTap: _applyOverdue),
       _KpiData(id: 'TODAY', label: 'In scadenza oggi', value: summary.dueToday, color: Colors.orange.shade600, active: _isActiveToday(), onTap: _applyToday),
-      _KpiData(id: 'NEXT7', label: 'Scadenza nei prossimi 7 giorni', value: summary.dueNext7Days, color: Colors.deepOrange.shade400, active: _isActiveNext7(), onTap: _applyNext7),
+      _KpiData(id: 'NEXT7', label: 'In scadenza nei prossimi 7 giorni', value: summary.dueNext7Days, color: Colors.deepOrange.shade400, active: _isActiveNext7(), onTap: _applyNext7),
     ];
     if (!twoColumns) {
       return Wrap(
@@ -377,6 +377,8 @@ class _StatesGrid extends StatelessWidget {
       'PIGNORAMENTO': Colors.brown.shade400,
       'PRECETTO': Colors.green.shade400,
     };
+    // Fix: build a set of active raw keys using explicit mapping (enum name lacks underscores)
+    final activeKeys = activeStates.map(_mapCaseStateToRaw).toSet();
     final content = LayoutBuilder(
       builder: (context, constraints) {
         // Colonne dinamiche: >=880 -> 4, >=660 -> 3, altrimenti 2
@@ -394,7 +396,7 @@ class _StatesGrid extends StatelessWidget {
         final chipWidth = (constraints.maxWidth - totalGap) / columns;
         return Wrap(
           spacing: gap,
-          runSpacing: 8,
+            runSpacing: 8,
           children: orderedKeys.map((key) {
             final label = CasesSummary.readableStateNames[key] ?? key;
             final value = summary.states[key] ?? 0;
@@ -405,7 +407,7 @@ class _StatesGrid extends StatelessWidget {
                 label: label,
                 value: value,
                 color: color,
-                active: activeStates.any((cs) => cs.name.toUpperCase() == key),
+                active: activeKeys.contains(key),
                 onTap: () {
                   // toggle logic: overwrite or clear
                   final enumVal = _mapRawToCaseState(key);
@@ -444,6 +446,19 @@ class _StatesGrid extends StatelessWidget {
       case 'PRECETTO': return CaseState.precetto;
       case 'PIGNORAMENTO': return CaseState.pignoramento;
       default: return null;
+    }
+  }
+  String _mapCaseStateToRaw(CaseState cs) { // reverse mapping to compute active
+    switch(cs) {
+      case CaseState.messaInMoraDaFare: return 'MESSA_IN_MORA_DA_FARE';
+      case CaseState.messaInMoraInviata: return 'MESSA_IN_MORA_INVIATA';
+      case CaseState.contestazioneDaRiscontrare: return 'CONTESTAZIONE_DA_RISCONTRARE';
+      case CaseState.depositoRicorso: return 'DEPOSITO_RICORSO';
+      case CaseState.decretoIngiuntivoDaNotificare: return 'DECRETO_INGIUNTIVO_DA_NOTIFICARE';
+      case CaseState.decretoIngiuntivoNotificato: return 'DECRETO_INGIUNTIVO_NOTIFICATO';
+      case CaseState.precetto: return 'PRECETTO';
+      case CaseState.pignoramento: return 'PIGNORAMENTO';
+      case CaseState.completata: return 'COMPLETATA'; // non presente in orderedKeys ma mantenuto per completezza
     }
   }
 }
