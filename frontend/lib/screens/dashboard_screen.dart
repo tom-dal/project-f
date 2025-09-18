@@ -164,8 +164,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: const Text('Gestione Recupero Crediti', style: TextStyle(color: Colors.white)),
         actions: [
           FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFF2C3E8C)), onPressed: _showCreateCaseDialog, child: const Text('Nuova Pratica')),
-          const SizedBox(width:12),
-          OutlinedButton(style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white)), onPressed: () {}, child: const Text('Dashboard')),
           const SizedBox(width:24),
         ],
       ),
