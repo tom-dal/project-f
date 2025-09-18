@@ -775,11 +775,11 @@ class _InstallmentPlanCard extends StatelessWidget {
       decoration: BoxDecoration(
           color: cs.surface,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [
+          boxShadow: const [
             BoxShadow(
                 color: Colors.black12,
                 blurRadius: 6,
-                offset: const Offset(0, 2))
+                offset: Offset(0, 2))
           ]),
       child: const Text('Nessun piano rateale presente',
           style: TextStyle(color: Colors.black54)),
@@ -1024,6 +1024,7 @@ class _InstallmentsTable extends StatelessWidget {
     final rem = remainder(total, per, n);
     return DataTable(
       columns: const [
+        DataColumn(label: SizedBox.shrink()),
         DataColumn(label: Text('Importo')),
         DataColumn(label: Text('Scadenza')),
         DataColumn(label: Text('Stato')),
@@ -1045,6 +1046,7 @@ class _InstallmentsTable extends StatelessWidget {
         // Mostra importo arrotondato all'intero per tutte tranne l'ultima
         final importo = (i < n - 1) ? per : rem;
         return DataRow(cells: [
+          DataCell(Text('${inst.installmentNumber}')),
           DataCell(Text('€ ${fmtAmt.format(importo)}')),
           DataCell(Text(fmtDate.format(inst.dueDate))),
           DataCell(Text(statusLabel,

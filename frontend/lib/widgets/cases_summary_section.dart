@@ -178,22 +178,29 @@ class _KpiChips extends StatelessWidget {
     return setA.length == setB.length && setA.containsAll(setB);
   }
   bool _isActiveOverdue() {
-    final today = _startOfDay(DateTime.now());
     if (deadlineFrom != null) return false;
     if (deadlineTo == null) return false;
+    final today = _startOfDay(DateTime.now());
     final toDay = _startOfDay(deadlineTo!);
-    return toDay.isBefore(today); // any past to-date with no from
+    // Attivo se deadlineTo è prima di oggi (scadute) e deadlineFrom è null
+    return toDay.isBefore(today);
   }
   bool _isActiveToday() {
     if (deadlineFrom == null || deadlineTo == null) return false;
-    final today = DateTime.now();
-    return _sameDay(deadlineFrom!, today) && _sameDay(deadlineTo!, today);
+    final today = _startOfDay(DateTime.now());
+    final fromDay = _startOfDay(deadlineFrom!);
+    final toDay = _endOfDay(deadlineTo!);
+    // Attivo se deadlineFrom e deadlineTo sono entrambi oggi
+    return fromDay == today && toDay.day == today.day && toDay.month == today.month && toDay.year == today.year;
   }
   bool _isActiveNext7() {
     if (deadlineFrom == null || deadlineTo == null) return false;
     final today = _startOfDay(DateTime.now());
     final plus7 = _startOfDay(today.add(const Duration(days: 7)));
-    return _sameDay(deadlineFrom!, today) && _sameDay(deadlineTo!, plus7);
+    final fromDay = _startOfDay(deadlineFrom!);
+    final toDay = _endOfDay(deadlineTo!);
+    // Attivo se deadlineFrom è oggi e deadlineTo è tra 7 giorni
+    return fromDay == today && toDay.day == plus7.day && toDay.month == plus7.month && toDay.year == plus7.year;
   }
 
   void _applyAttive() {

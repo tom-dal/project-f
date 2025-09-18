@@ -515,17 +515,8 @@ public class DebtCaseService {
             if (dueDate.isBefore(LocalDateTime.now())) {
                 throw new IllegalArgumentException("La data di scadenza non può essere nel passato");
             }
-            // Validate ordering constraints
-            // previous installment (by date excluding itself)
-            debtCase.getInstallments().stream()
-                    .filter(i -> !i.getInstallmentId().equals(installmentId))
-                    .filter(i -> !Boolean.TRUE.equals(i.getPaid()))
-                    .filter(i -> i.getDueDate().isBefore(installment.getDueDate())) // existing ordering baseline
-                    .min((a,b) -> b.getDueDate().compareTo(a.getDueDate())); // last before
-            // We'll compute neighbors after tentative update
-            LocalDateTime oldDue = installment.getDueDate();
             installment.setDueDate(dueDate);
-            validateInstallmentOrdering(debtCase, allowPaidPastDates(true));
+            validateInstallmentOrdering(debtCase, true);
             installment.setLastModifiedDate(LocalDateTime.now());
         }
         reorderInstallmentNumbers(debtCase);
@@ -639,10 +630,6 @@ public class DebtCaseService {
                 if (!allowPaidPastDates && inst.getDueDate().isBefore(LocalDateTime.now())) {
                     throw new IllegalArgumentException("Rata pagata con data passata non consentita");
                 }
-            } else {
-                if (inst.getDueDate().isBefore(LocalDateTime.now())) {
-                    throw new IllegalArgumentException("Le rate non pagate non possono avere scadenza nel passato");
-                }
             }
             if (prev != null && !inst.getDueDate().isAfter(prev)) {
                 throw new IllegalArgumentException("Le date delle rate devono essere strettamente crescenti");
@@ -650,8 +637,6 @@ public class DebtCaseService {
             prev = inst.getDueDate();
         }
     }
-
-    private boolean allowPaidPastDates(boolean value) { return value; }
 
     // --- Payments Management (reintroduced) ---
     @Transactional(readOnly = true)
