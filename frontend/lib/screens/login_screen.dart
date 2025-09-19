@@ -116,8 +116,6 @@ class _LoginScreenState extends State<LoginScreen> {
             ? SnackBarAction(
                 label: 'Contatta Admin',
                 onPressed: () {
-                  // Qui puoi aggiungere la logica per contattare l'admin
-                  // Per esempio, aprire una mail o mostrare informazioni di contatto
                 },
                 textColor: Colors.white,
               )
@@ -158,7 +156,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'Debt Collection Manager',
+                      'Gestione Crediti',
                       style: Theme.of(context).textTheme.headlineMedium,
                     ),
                     const SizedBox(height: 32),
@@ -170,7 +168,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
-                          return 'Please enter your username';
+                          return 'Inserisci il tuo username';
                         }
                         return null;
                       },
