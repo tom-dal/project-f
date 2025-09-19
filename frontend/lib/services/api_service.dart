@@ -12,6 +12,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:convert';
 import 'dart:developer' as developer;
+import '../models/user.dart';
 
 class ApiService {
   // URL del backend - caricato dinamicamente da config.json
@@ -1430,5 +1431,128 @@ class ApiService {
       }
       rethrow;
     }
+  }
+
+  // ===================== USERS MANAGEMENT =====================
+  Future<List<UserModel>> getUsers() async {
+    try {
+      final response = await _dio.get('/users', options: Options(validateStatus: (s)=> true));
+      if(response.statusCode == 200){
+        final data = response.data as List<dynamic>;
+        return data.map((e)=> UserModel.fromJson(e as Map<String,dynamic>)).toList();
+      }
+      if(response.statusCode == 401){
+        await _handleUnauthorizedSafely('/users');
+        throw 'Sessione scaduta. Effettua nuovamente il login.';
+      }
+      if(response.data is Map){
+        throw response.data['message'] ?? 'Impossibile recuperare utenti';
+      }
+      throw 'Impossibile recuperare utenti';
+    } on DioException catch(e){
+      if(e.response?.statusCode == 401){
+        await _handleUnauthorizedSafely('/users');
+        throw 'Sessione scaduta. Effettua nuovamente il login.';
+      }
+      throw e.message ?? 'Errore di rete durante il recupero utenti';
+    }
+  }
+
+  Future<UserModel> createUser({required String username, required String password, required List<String> roles, required bool passwordExpired}) async {
+    try {
+      final response = await _dio.post('/users', data: {
+        'username': username.trim(),
+        'password': password,
+        'roles': roles,
+        'passwordExpired': passwordExpired,
+      }, options: Options(validateStatus: (s)=> true));
+      if(response.statusCode == 200){
+        return UserModel.fromJson(response.data);
+      }
+      if(response.statusCode == 401){
+        await _handleUnauthorizedSafely('/users');
+        throw 'Sessione scaduta. Effettua nuovamente il login.';
+      }
+      if(response.data is Map){
+        throw response.data['message'] ?? 'Creazione utente fallita';
+      }
+      throw 'Creazione utente fallita';
+    } on DioException catch(e){
+      if(e.response?.statusCode == 401){
+        await _handleUnauthorizedSafely('/users');
+        throw 'Sessione scaduta. Effettua nuovamente il login.';
+      }
+      throw e.message ?? 'Errore di rete durante la creazione utente';
+    }
+  }
+
+  Future<UserModel> updateUser({required String id, required String username, String? password, required List<String> roles, required bool passwordExpired}) async {
+    try {
+      final body = {
+        'username': username.trim(),
+        'roles': roles,
+        'passwordExpired': passwordExpired,
+      };
+      if(password != null && password.isNotEmpty){ body['password'] = password; }
+      final response = await _dio.put('/users/$id', data: body, options: Options(validateStatus: (s)=> true));
+      if(response.statusCode == 200){
+        return UserModel.fromJson(response.data);
+      }
+      if(response.statusCode == 401){
+        await _handleUnauthorizedSafely('/users/$id');
+        throw 'Sessione scaduta. Effettua nuovamente il login.';
+      }
+      if(response.data is Map){
+        throw response.data['message'] ?? 'Aggiornamento utente fallito';
+      }
+      throw 'Aggiornamento utente fallito';
+    } on DioException catch(e){
+      if(e.response?.statusCode == 401){
+        await _handleUnauthorizedSafely('/users/$id');
+        throw 'Sessione scaduta. Effettua nuovamente il login.';
+      }
+      throw e.message ?? 'Errore di rete durante aggiornamento utente';
+    }
+  }
+
+  Future<void> deleteUser(String id) async {
+    try {
+      final response = await _dio.delete('/users/$id', options: Options(validateStatus: (s)=> true));
+      if(response.statusCode == 200 || response.statusCode == 204){
+        return;
+      }
+      if(response.statusCode == 401){
+        await _handleUnauthorizedSafely('/users/$id');
+        throw 'Sessione scaduta. Effettua nuovamente il login.';
+      }
+      if(response.data is Map){
+        throw response.data['message'] ?? 'Eliminazione utente fallita';
+      }
+      throw 'Eliminazione utente fallita';
+    } on DioException catch(e){
+      if(e.response?.statusCode == 401){
+        await _handleUnauthorizedSafely('/users/$id');
+        throw 'Sessione scaduta. Effettua nuovamente il login.';
+      }
+      throw e.message ?? 'Errore di rete durante eliminazione utente';
+    }
+  }
+
+  String? currentUsernameFromTokenSync(String? token){
+    if(token==null) return null;
+    try {
+      final parts = token.split('.');
+      if(parts.length != 3) return null;
+      var payload = parts[1];
+      while(payload.length % 4 != 0){ payload += '='; }
+      final decoded = utf8.decode(base64Url.decode(payload));
+      final map = jsonDecode(decoded);
+      return map['sub']?.toString();
+    } catch(_) { return null; }
+  }
+
+  Future<String?> getCurrentUsername() async {
+    final token = await getStoredToken();
+    return currentUsernameFromTokenSync(token);
   }
 }

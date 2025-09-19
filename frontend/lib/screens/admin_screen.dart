@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../blocs/state_transitions/state_transitions_bloc.dart';
 import '../models/state_transition_config.dart';
 import '../models/case_state.dart'; // Import for label getter
+import '../widgets/user_management_panel.dart';
 
 /// Screen to manage state transition configuration
 class AdminScreen extends StatefulWidget {
@@ -238,9 +239,7 @@ class _AdminScreenState extends State<AdminScreen> {
               borderRadius: BorderRadius.circular(12),
             ),
             height: double.infinity,
-            child: const Center(
-              child: Text('Placeholder', style: TextStyle(color: Colors.grey, fontSize: 18)),
-            ),
+            child: const UserManagementPanel(),
           ),
         ),
       ],

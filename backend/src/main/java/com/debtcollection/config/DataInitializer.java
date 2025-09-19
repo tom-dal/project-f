@@ -53,7 +53,7 @@ public class DataInitializer implements CommandLineRunner {
         adminUser.setUsername("admin");
         adminUser.setPassword(passwordEncoder.encode("admin")); // Default password from instructions
         adminUser.setPasswordExpired(true); // USER PREFERENCE: Force password change on first login
-        adminUser.setRoles(Set.of("ROLE_ADMIN", "ROLE_USER"));
+        adminUser.setRoles(Set.of("ADMIN", "USER"));
 
         userRepository.save(adminUser);
         log.info("✅ Admin user created successfully with username: admin, password: admin (change required)");

@@ -13,6 +13,7 @@ import '../utils/date_formats.dart';
 import '../services/api_service.dart';
 import '../blocs/state_transitions/state_transitions_bloc.dart';
 import 'admin_screen.dart';
+import '../blocs/auth/auth_bloc.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -80,6 +81,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: const CreateCaseDialog(),
       ),
     );
+  }
+
+  Future<void> _confirmLogout() async {
+    final should = await showDialog<bool>(
+      context: context,
+      builder: (ctx)=> AlertDialog(
+        title: const Text('Conferma uscita'),
+        content: const Text('Vuoi davvero uscire dall\'applicazione?'),
+        actions: [
+          TextButton(onPressed: ()=> Navigator.pop(ctx,false), child: const Text('Annulla')),
+          FilledButton(onPressed: ()=> Navigator.pop(ctx,true), child: const Text('Esci')),
+        ],
+      ),
+    );
+    if(should == true && mounted){
+      context.read<AuthBloc>().add(LogoutRequested());
+    }
   }
 
   // USER PREFERENCE: Apply filters via backend call instead of frontend filtering
@@ -199,6 +217,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: const Text('Gestisci'),
             ),
           ],
+          const SizedBox(width:16),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white)),
+            onPressed: _confirmLogout,
+            icon: const Icon(Icons.logout),
+            label: const Text('Esci'),
+          ),
           const SizedBox(width:24),
         ],
       ),
