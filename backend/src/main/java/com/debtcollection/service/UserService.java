@@ -57,16 +57,22 @@ public class UserService implements UserDetailsService {
         user.setUsername(username);
         user.setPassword(passwordEncoder.encode(plainPassword));
         user.setPasswordExpired(passwordExpired);
-        Set<String> roleSet = (roles == null || roles.isEmpty()) ? Set.of("ROLE_USER") : normalizeRoles(roles);
+        Set<String> roleSet = (roles == null || roles.isEmpty()) ? Set.of("USER") : new HashSet<>(roles);
         user.setRoles(new HashSet<>(roleSet));
         User saved = userRepository.save(user);
         log.info("User created: {} id={}", username, saved.getId());
         return saved;
     }
 
-    public User update(String id, String newPlainPassword, Collection<String> roles, Boolean passwordExpired) {
-        log.info("Updating user id={} password?={} roles?={} passwordExpired?={}", id, newPlainPassword != null, roles != null, passwordExpired != null);
+    public User update(String id, String username, String newPlainPassword, Collection<String> roles, Boolean passwordExpired) {
+        log.info("Updating user id={} username?={} password?={} roles?={} passwordExpired?={}", id, username != null, newPlainPassword != null, roles != null, passwordExpired != null);
         User user = userRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("User not found"));
+        if (username != null && !username.equals(user.getUsername())) {
+            if (userRepository.findByUsername(username).isPresent()) {
+                throw new IllegalArgumentException("Username already exists");
+            }
+            user.setUsername(username);
+        }
         if (newPlainPassword != null) {
             if (!isPasswordValid(newPlainPassword)) {
                 throw new IllegalArgumentException("Password must be at least 8 characters long and contain at least one uppercase letter, one number, and one special character");
@@ -77,7 +83,7 @@ public class UserService implements UserDetailsService {
             if (roles.isEmpty()) {
                 user.setRoles(new HashSet<>(Set.of("ROLE_USER")));
             } else {
-                user.setRoles(new HashSet<>(normalizeRoles(roles)));
+                user.setRoles(new HashSet<>(roles));
             }
         }
         if (passwordExpired != null) {
@@ -100,12 +106,5 @@ public class UserService implements UserDetailsService {
         if (!password.matches(".*\\d.*")) return false;
         if (!password.matches(".*[!@#$%^&*()\\-_=+\\[\\]{};:'\",.<>/?].*")) return false;
         return true;
-    }
-
-    private Set<String> normalizeRoles(Collection<String> roles) {
-        return roles.stream()
-                .filter(Objects::nonNull)
-                .map(r -> r.startsWith("ROLE_") ? r : "ROLE_" + r)
-                .collect(Collectors.toSet());
     }
 }

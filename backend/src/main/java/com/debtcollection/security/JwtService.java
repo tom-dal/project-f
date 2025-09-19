@@ -13,9 +13,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import java.security.Key;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -50,6 +48,7 @@ public class JwtService {
         if (!claims.containsKey(CLAIM_ROLES)) {
             String roles = userDetails.getAuthorities().stream()
                     .map(GrantedAuthority::getAuthority)
+                    .map(this::normalizeRole)
                     .collect(Collectors.joining(","));
             claims.put(CLAIM_ROLES, roles);
         }
@@ -102,6 +101,7 @@ public class JwtService {
         // Include roles also in limited token so frontend can still know admin capabilities
         String roles = userDetails.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
+                .map(this::normalizeRole)
                 .collect(Collectors.joining(","));
         claims.put(CLAIM_ROLES, roles);
         return Jwts
@@ -118,5 +118,9 @@ public class JwtService {
         Claims claims = extractAllClaims(token);
         return claims.get(CLAIM_PASSWORD_CHANGE, Boolean.class) != null && 
                claims.get(CLAIM_PASSWORD_CHANGE, Boolean.class);
+    }
+
+    private String normalizeRole(String role) {
+        return role.startsWith("ROLE_") ? role : "ROLE_" + role;
     }
 }

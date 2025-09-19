@@ -59,7 +59,7 @@ class StateTransitionControllerIntegrationTest {
         adminUser.setUsername("admin");
         adminUser.setPassword(passwordEncoder.encode("admin"));
         adminUser.setPasswordExpired(true); // forza change-password flow
-        adminUser.setRoles(Set.of("ROLE_ADMIN"));
+        adminUser.setRoles(Set.of("ADMIN"));
         userRepository.save(adminUser);
     }
 
