@@ -44,6 +44,7 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
   final _formKey = GlobalKey<FormState>();
   final _amountFocus = FocusNode();
   final _notesFocus = FocusNode();
+  final _debtorFocus = FocusNode(); // aggiunto per evitare overwrite mentre si digita
   final NumberFormat _fmt = NumberFormat('#,##0.00', 'it_IT');
   bool _wasSaving = false;
   bool _initialLoaded = false;
@@ -67,6 +68,7 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
     _notesCtrl.dispose();
     _amountFocus.dispose();
     _notesFocus.dispose();
+    _debtorFocus.dispose(); // dispose nuovo focus node
     super.dispose();
   }
 
@@ -123,11 +125,12 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
                     selection: TextSelection.collapsed(offset: f.length));
               }
             }
-            _debtorCtrl.text = state.debtorName;
-            if (state.error != null) {
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text(state.error!),
-                  backgroundColor: Colors.redAccent));
+            if (!_debtorFocus.hasFocus && _debtorCtrl.text != state.debtorName) {
+              final v = state.debtorName;
+              _debtorCtrl.value = TextEditingValue(
+                text: v,
+                selection: TextSelection.collapsed(offset: v.length),
+              );
             }
             _wasSaving = state.saving;
             _initialLoaded = true;
@@ -215,6 +218,7 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
                                   debtorCtrl: _debtorCtrl,
                                   amountCtrl: _amountCtrl,
                                   amountFocus: _amountFocus,
+                                  debtorFocus: _debtorFocus,
                                   bloc: context.read<CaseDetailBloc>()),
                               const SizedBox(height: 28),
                               _NotesCard(
@@ -257,6 +261,7 @@ class _EditableFieldsCard extends StatelessWidget {
   final TextEditingController debtorCtrl;
   final TextEditingController amountCtrl;
   final FocusNode amountFocus;
+  final FocusNode debtorFocus; // nuovo focus node per il campo debitore
   final CaseDetailBloc bloc;
 
   const _EditableFieldsCard(
@@ -264,6 +269,7 @@ class _EditableFieldsCard extends StatelessWidget {
       required this.debtorCtrl,
       required this.amountCtrl,
       required this.amountFocus,
+      required this.debtorFocus,
       required this.bloc});
 
   double? _parseAmount(String v) {
@@ -298,6 +304,7 @@ class _EditableFieldsCard extends StatelessWidget {
         const SizedBox(height: 16),
         TextFormField(
           controller: debtorCtrl,
+          focusNode: debtorFocus,
           decoration: const InputDecoration(labelText: 'Debitore'),
           onChanged: (v) => bloc.add(EditDebtorName(v)),
           validator: (v) {
@@ -377,7 +384,7 @@ class _EditableFieldsCard extends StatelessWidget {
         const SizedBox(height: 14),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
-          title: const Text('Trattative in corso'),
+          title: const Text('Negoziazione in corso'),
           value: s.ongoingNegotiations,
           onChanged: (v) => bloc.add(EditOngoingNegotiations(v)),
         ),
