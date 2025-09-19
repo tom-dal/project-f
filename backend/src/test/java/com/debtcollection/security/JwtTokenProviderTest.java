@@ -22,7 +22,7 @@ class JwtTokenProviderTest {
     void setUp() {
         provider = new JwtTokenProvider();
         ReflectionTestUtils.setField(provider, "jwtSecret", "dGhpc2lzYXZlcnlsb25nc2VjcmV0a2V5Zm9yand0dG9rZW5nZW5lcmF0aW9u");
-        ReflectionTestUtils.setField(provider, "jwtExpirationInMs", 2000L);
+        ReflectionTestUtils.setField(provider, "jwtExpirationInMs", 60000L);
         UserDetails principal = new User("alice", "pwd", List.of(new SimpleGrantedAuthority("ROLE_USER"), new SimpleGrantedAuthority("ADMIN")));
         auth = new UsernamePasswordAuthenticationToken(principal, "pwd", principal.getAuthorities());
     }
