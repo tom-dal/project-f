@@ -11,6 +11,7 @@ import '../blocs/debt_case/debt_case_bloc.dart';
 import '../services/api_service.dart';
 import '../utils/italian_date_picker.dart';
 import '../utils/date_formats.dart';
+import '../widgets/replace_installment_plan_dialog.dart';
 
 class CaseDetailEditScreen extends StatelessWidget {
   final String caseId;
@@ -78,8 +79,10 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
+    return PopScope(
+      canPop: !_shouldRefresh,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return; // già gestito dal sistema
         if (_shouldRefresh) {
           final st = context.read<CaseDetailBloc>().state;
           if (st is CaseDetailLoaded) {
@@ -90,9 +93,7 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
           } else {
             Navigator.pop(context, {'refresh': true});
           }
-          return false;
         }
-        return true;
       },
       child: BlocConsumer<CaseDetailBloc, CaseDetailState>(
         listener: (context, state) {
@@ -106,10 +107,12 @@ class _CaseDetailViewState extends State<_CaseDetailView> {
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                   content: Text(state.successMessage!),
                   duration: const Duration(milliseconds: 1200)));
-              if (mounted) Navigator.pop(context, {
+              if (mounted) {
+                Navigator.pop(context, {
                 'refresh': true,
                 'caseData': state.caseData.toJson(),
               });
+              }
             }
             if (!_notesFocus.hasFocus) _notesCtrl.text = state.notes ?? '';
             if (!_amountFocus.hasFocus) {
@@ -729,6 +732,8 @@ class _InstallmentPlanCard extends StatelessWidget {
 
   const _InstallmentPlanCard({required this.s, required this.bloc});
 
+  String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -843,165 +848,24 @@ class _InstallmentPlanCard extends StatelessWidget {
 
   void _openReplacePlanDialog(BuildContext context, List<Installment> current) {
     final blocState = context.read<CaseDetailBloc>().state as CaseDetailLoaded;
-    final residuo = blocState.caseData.remainingAmount ??
-        (blocState.owedAmount - (blocState.caseData.totalPaidAmount ?? 0));
-    final installmentsCtrl =
-        TextEditingController(text: current.length.toString());
-    final freqCtrl = TextEditingController(text: '30');
-    int parsedInstallments = current.length;
-    int parsedFreq = 30;
-    DateTime firstDue = current.isNotEmpty
-        ? current.first.dueDate
-        : DateTime.now().add(const Duration(days: 30));
-    bool userPicked = false;
-    double floorAmt(double total, int n) {
-      if (n <= 0) return 0;
-      final raw = total / n;
-      return raw.floorToDouble(); // Arrotonda all'intero
-    }
-
-    double remainder(double total, double per, int n) {
-      // L'ultima rata compensa il resto, può avere decimali
-      return double.parse((total - per * (n - 1)).toStringAsFixed(2));
-    }
-
-    showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => StatefulBuilder(builder: (ctx, setState) {
-              void recalc({bool fromFreq = false}) {
-                parsedInstallments = int.tryParse(installmentsCtrl.text
-                        .replaceAll(RegExp(r'[^0-9]'), '')) ??
-                    0;
-                parsedFreq = int.tryParse(
-                        freqCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ??
-                    0;
-                if (parsedFreq <= 0) parsedFreq = 1;
-                if (!userPicked && (fromFreq || parsedInstallments > 0))
-                  firstDue = DateTime.now().add(Duration(days: parsedFreq));
-                setState(() {});
-              }
-
-              Future<void> pick() async {
-                final p = await pickItalianDate(
-                    ctx,
-                    initialDate: firstDue,
-                    firstDate: DateTime(DateTime.now().year - 1),
-                    lastDate: DateTime(DateTime.now().year + 5),
-                    helpText: 'Prima scadenza');
-                if (p != null) {
-                  setState(() {
-                    firstDue = DateTime(p.year, p.month, p.day);
-                    userPicked = true;
-                  });
-                }
-              }
-
-              final per = floorAmt(residuo, parsedInstallments);
-              final rem = remainder(residuo, per, parsedInstallments);
-              String? validate() {
-                if (parsedInstallments < 2) return 'Minimo 2 rate';
-                if (parsedInstallments > 240) return 'Troppe rate';
-                if (per < 0.01) return 'Importo rata troppo basso';
-                if (parsedFreq < 1) return 'Frequenza minima 1';
-                if (parsedFreq > 365) return 'Frequenza massima 365';
-                return null;
-              }
-
-              void submit() {
-                final err = validate();
-                if (err != null) {
-                  ScaffoldMessenger.of(context)
-                      .showSnackBar(SnackBar(content: Text(err)));
-                  return;
-                }
-                bloc.add(ReplaceInstallmentPlanSimple(
-                    numberOfInstallments: parsedInstallments,
-                    firstDueDate: firstDue,
-                    perInstallmentAmountFloor: per,
-                    frequencyDays: parsedFreq,
-                    total: residuo));
-                Navigator.pop(ctx);
-              }
-
-              final fmt = NumberFormat('#,##0.00', 'it_IT');
-              final error = validate();
-              return AlertDialog(
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20)),
-                title: const Text('Modifica piano rateale'),
-                content: SizedBox(
-                    width: 520,
-                    child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Debito residuo: € ${fmt.format(residuo)}',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
-                                  ?.copyWith(fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 12),
-                          Row(children: [
-                            Expanded(
-                                child: TextField(
-                                    controller: installmentsCtrl,
-                                    decoration: const InputDecoration(
-                                        labelText: 'Numero rate'),
-                                    keyboardType: TextInputType.number,
-                                    inputFormatters: [
-                                      FilteringTextInputFormatter.digitsOnly
-                                    ],
-                                    onChanged: (_) => recalc())),
-                            const SizedBox(width: 16),
-                            Expanded(
-                                child: TextField(
-                                    controller: freqCtrl,
-                                    decoration: const InputDecoration(
-                                        labelText: 'Giorni tra rate'),
-                                    keyboardType: TextInputType.number,
-                                    inputFormatters: [
-                                      FilteringTextInputFormatter.digitsOnly
-                                    ],
-                                    onChanged: (_) => recalc(fromFreq: true))),
-                          ]),
-                          const SizedBox(height: 14),
-                          InkWell(
-                              onTap: pick,
-                              child: InputDecorator(
-                                  decoration: const InputDecoration(
-                                      labelText: 'Prima scadenza'),
-                                  child: Row(children: [
-                                    const Icon(Icons.calendar_today, size: 18),
-                                    const SizedBox(width: 8),
-                                    Text(_fmtDate(firstDue))
-                                  ]))),
-                          const SizedBox(height: 16),
-                          Text('Importo rata: € ${fmt.format(per)}'),
-                          const SizedBox(height: 4),
-                          Text('Importo ultima rata: € ${fmt.format(rem < 0 ? 0 : rem)}',
-                              style: const TextStyle(color: Colors.black54)),
-                          if (error != null)
-                            Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: Text(error,
-                                    style: TextStyle(
-                                        color: Colors.red.shade700,
-                                        fontSize: 12))),
-                        ])),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('Annulla')),
-                  ElevatedButton(
-                      onPressed: submit, child: const Text('Conferma')),
-                ],
-              );
-            }));
+    final residuo = blocState.caseData.remainingAmount ?? (blocState.owedAmount - (blocState.caseData.totalPaidAmount ?? 0));
+    if (current.isEmpty) return; // safety
+    showReplaceInstallmentPlanDialog(
+      context: context,
+      residuo: residuo,
+      initialInstallments: current.length,
+      initialFirstDueDate: current.first.dueDate,
+      onConfirm: ({required int numberOfInstallments, required DateTime firstDueDate, required double perInstallmentAmountFloor, required int frequencyDays, required double total}) {
+        bloc.add(ReplaceInstallmentPlanSimple(
+          numberOfInstallments: numberOfInstallments,
+          firstDueDate: firstDueDate,
+          perInstallmentAmountFloor: perInstallmentAmountFloor,
+          frequencyDays: frequencyDays,
+          total: total,
+        ));
+      },
+    );
   }
-
-  String _fmtDate(DateTime d) =>
-      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
 }
 
 class _InstallmentsTable extends StatelessWidget {

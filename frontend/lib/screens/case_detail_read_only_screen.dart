@@ -11,7 +11,9 @@ import '../services/api_service.dart';
 import '../utils/amount_validator.dart';
 import '../utils/italian_date_picker.dart';
 import '../utils/date_formats.dart';
+import '../utils/installment_rounding.dart';
 import 'case_detail_edit_screen.dart';
+import '../widgets/replace_installment_plan_dialog.dart';
 
 class CaseDetailReadOnlyScreen extends StatelessWidget {
   final String caseId;
@@ -318,21 +320,7 @@ class _CaseDetailReadOnlyViewState extends State<_CaseDetailReadOnlyView> {
     int parsedInstallments = 2;
     int parsedFrequency = 30;
     DateTime firstDueDate = DateTime.now().add(Duration(days: parsedFrequency));
-    bool userPickedDate = false; // se l'utente modifica manualmente la data non viene più ricalcolata automaticamente
-
-    double _calcPerInstallmentFloor(double total, int n){
-      if (n <= 0) return 0; // safety
-      // Rounding strategy: floor to 2 decimals so last installment can absorb remainder manual later
-      final raw = total / n;
-      return (raw * 100).floor() / 100.0;
-    }
-
-    double _remainingAfterDistribution(double total, double perInstallment, int n){
-      final distributed = perInstallment * n;
-      final rem = total - distributed;
-      // floating precision safety
-      return double.parse(rem.toStringAsFixed(2));
-    }
+    bool userPickedDate = false;
 
     showDialog(
       context: context,
@@ -350,26 +338,28 @@ class _CaseDetailReadOnlyViewState extends State<_CaseDetailReadOnlyView> {
             setState((){});
           }
 
-            Future<void> _pickDate() async {
-              final picked = await pickItalianDate(
-                ctx,
-                initialDate: firstDueDate,
-                firstDate: DateTime(DateTime.now().year - 1),
-                lastDate: DateTime(DateTime.now().year + 5),
-                helpText: 'Prima scadenza',
-              );
-              if (picked != null) {
-                setState((){ firstDueDate = DateTime(picked.year, picked.month, picked.day); userPickedDate = true; });
-              }
+          Future<void> _pickDate() async {
+            final picked = await pickItalianDate(
+              ctx,
+              initialDate: firstDueDate,
+              firstDate: DateTime(DateTime.now().year - 1),
+              lastDate: DateTime(DateTime.now().year + 5),
+              helpText: 'Prima scadenza',
+            );
+            if (picked != null) {
+              setState((){ firstDueDate = DateTime(picked.year, picked.month, picked.day); userPickedDate = true; });
             }
+          }
 
-          double perInstallment = _calcPerInstallmentFloor(residuo, parsedInstallments);
-          double remainder = _remainingAfterDistribution(residuo, perInstallment, parsedInstallments);
+          // Nuova logica: rate intere (floor) + ultima con resto decimale
+          final perInstallment = perInstallmentIntFloor(residuo, parsedInstallments);
+          final lastAmount = lastInstallmentWithRemainder(residuo, perInstallment, parsedInstallments);
+          final remainder = parsedInstallments > 1 ? double.parse((lastAmount - perInstallment).toStringAsFixed(2)) : 0.0; // differenza rispetto alle altre
 
           String? _validate(){
             if (parsedInstallments < 2) return 'Numero di rate minimo 2';
             if (parsedInstallments > 240) return 'Numero di rate troppo elevato';
-            if (perInstallment < 0.01) return 'Importo per rata troppo basso';
+            if (perInstallment < 1 && residuo >= 2) return 'Importo per rata troppo basso (aumenta numero rate o riduci)';
             if (parsedFrequency < 1) return 'Giorni tra rate minimo 1';
             if (parsedFrequency > 365) return 'Giorni tra rate massimo 365';
             return null;
@@ -381,11 +371,10 @@ class _CaseDetailReadOnlyViewState extends State<_CaseDetailReadOnlyView> {
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
               return;
             }
-            // Dispatch evento creando piano. L'ultima rata potrà essere aggiustata dopo la creazione.
             context.read<CaseDetailBloc>().add(CreateInstallmentPlanEvent(
               numberOfInstallments: parsedInstallments,
               firstDueDate: firstDueDate,
-              installmentAmount: perInstallment,
+              installmentAmount: perInstallment, // le prime n-1 rate
               frequencyDays: parsedFrequency,
             ));
             Navigator.pop(ctx);
@@ -468,20 +457,23 @@ class _CaseDetailReadOnlyViewState extends State<_CaseDetailReadOnlyView> {
                     Builder(builder: (_){
                       if (parsedInstallments < 2) return const Text('Inserisci almeno 2 rate', style: TextStyle(color: Colors.black54));
                       if (perInstallment < 0.01) return const Text('Importo rata risultante troppo basso', style: TextStyle(color: Colors.redAccent));
-                      final covered = perInstallment * parsedInstallments;
+                      final coveredFirst = perInstallment * (parsedInstallments - 1);
+                      final totalCheck = coveredFirst + lastAmount;
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Importo stimato per rata: € ${fmt.format(perInstallment)}'),
-                          if (remainder > 0) Text('Resto non coperto: € ${fmt.format(remainder)} (potrà essere aggiustato modificando l\'ultima rata dopo la creazione).', style: const TextStyle(fontSize: 12, color: Colors.black54)),
-                          Text('Totale coperto: € ${fmt.format(covered)}', style: const TextStyle(fontSize: 12)),
+                          ...(parsedInstallments == 2 ?
+                          [Text('Importo prima rata: € ${fmt.format(perInstallment)}'),
+                            Text('Importo seconda rata: € ${fmt.format(lastAmount)}')] :
+                          [Text('Importo rate: € ${fmt.format(perInstallment)}'),
+                          Text('Ultima rata: € ${fmt.format(lastAmount)}')]),
                         ],
                       );
                     }),
                     const SizedBox(height: 16),
                     const Divider(),
                     const SizedBox(height: 8),
-                    const Text('Le singole rate potranno essere modificate successivamente.', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+                    const Text('Dopo la creazione sarà possibile modificare manualmente le scadenze delle singole rate', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
                     if (validationError != null) Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Text(validationError, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
@@ -505,7 +497,7 @@ class _CaseDetailReadOnlyViewState extends State<_CaseDetailReadOnlyView> {
   }
 
   void _openRegisterInstallmentPaymentDialog(Installment inst, CaseDetailLoaded s){
-    if (inst.paid == true) return; // already paid safeguard
+    if (inst.paid == true) return; // safeguard
     final amount = inst.amount;
     DateTime selectedDate = DateTime.now();
     showDialog(
@@ -582,6 +574,29 @@ class _CaseDetailReadOnlyViewState extends State<_CaseDetailReadOnlyView> {
           );
         });
       }
+    );
+  }
+
+  void _openReplacePlanDialog(CaseDetailLoaded s) {
+    // Mostra dialog sostituzione piano con stessa logica di arrotondamento interi + resto
+    final list = s.localInstallments.values.toList();
+    if (list.isEmpty) return; // safety
+    list.sort((a,b)=>a.installmentNumber.compareTo(b.installmentNumber));
+    final residuo = s.caseData.remainingAmount ?? (s.owedAmount - (s.caseData.totalPaidAmount ?? 0));
+    showReplaceInstallmentPlanDialog(
+      context: context,
+      residuo: residuo,
+      initialInstallments: list.length,
+      initialFirstDueDate: list.first.dueDate,
+      onConfirm: ({required int numberOfInstallments, required DateTime firstDueDate, required double perInstallmentAmountFloor, required int frequencyDays, required double total}) {
+        context.read<CaseDetailBloc>().add(ReplaceInstallmentPlanSimple(
+          numberOfInstallments: numberOfInstallments,
+          firstDueDate: firstDueDate,
+            perInstallmentAmountFloor: perInstallmentAmountFloor,
+            frequencyDays: frequencyDays,
+            total: total,
+        ));
+      },
     );
   }
 }
@@ -811,7 +826,7 @@ class _PaymentsSection extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              _PaymentsTable(payments: payments),
+              _PaymentsTable(payments: payments, hasInstallmentPlan: s.caseData.hasInstallmentPlan == true, s: s),
             ],
           ),
         ],
@@ -819,30 +834,44 @@ class _PaymentsSection extends StatelessWidget {
     );
   }
 
-  List<_PaymentRow> _extractPayments(){
+  List<_PaymentRow> _extractPayments() {
     final list = <_PaymentRow>[];
     final raw = s.caseData.payments;
-    if (raw==null) return list;
+    if (raw == null) return list;
+    final hasPlan = s.caseData.hasInstallmentPlan == true;
+    final installmentById = hasPlan
+        ? {for (final inst in s.localInstallments.values) inst.id: inst}
+        : const <String, Installment>{};
     for (final p in raw) {
       try {
         if (p is Map) {
           final amountRaw = p['amount'];
-            double? amount;
-            if (amountRaw is num) amount = amountRaw.toDouble();
-            else if (amountRaw is String) amount = double.tryParse(amountRaw.replaceAll(',', '.'));
+          double? amount;
+          if (amountRaw is num) amount = amountRaw.toDouble();
+          else if (amountRaw is String) amount = double.tryParse(amountRaw.replaceAll(',', '.'));
           final dateRaw = p['paymentDate'];
           DateTime? date;
           if (dateRaw is String && dateRaw.isNotEmpty) {
             try { date = DateTime.parse(dateRaw.length==10 && !dateRaw.contains('T') ? dateRaw : dateRaw); } catch(_) {}
           }
+          String? numberLabel;
+          if (hasPlan) {
+            final instId = p['installmentId'];
+            if (instId is String) {
+              final inst = installmentById[instId];
+              numberLabel = inst != null ? inst.installmentNumber.toString() : '?';
+            } else {
+              numberLabel = '?';
+            }
+          }
           if (amount!=null && date!=null) {
-            list.add(_PaymentRow(amount: amount, date: date));
+            list.add(_PaymentRow(amount: amount, date: date, installmentNumberLabel: numberLabel));
           } else {
-            list.add(_PaymentRow(amount: amount ?? 0.0, date: date ?? DateTime.fromMillisecondsSinceEpoch(0), invalid: true));
+            list.add(_PaymentRow(amount: amount ?? 0.0, date: date ?? DateTime.fromMillisecondsSinceEpoch(0), invalid: true, installmentNumberLabel: numberLabel));
           }
         }
       } catch(_) {
-        list.add(_PaymentRow(amount: 0.0, date: DateTime.fromMillisecondsSinceEpoch(0), invalid: true));
+        list.add(_PaymentRow(amount: 0.0, date: DateTime.fromMillisecondsSinceEpoch(0), invalid: true, installmentNumberLabel: hasPlan ? '?' : null));
       }
     }
     list.sort((a,b)=> a.date.compareTo(b.date));
@@ -850,28 +879,45 @@ class _PaymentsSection extends StatelessWidget {
   }
 }
 
-class _PaymentRow { final double amount; final DateTime date; final bool invalid; _PaymentRow({required this.amount, required this.date, this.invalid=false}); }
+class _PaymentRow {
+  final double amount;
+  final DateTime date;
+  final bool invalid;
+  final String? installmentNumberLabel; // null quando non c'è piano
+  const _PaymentRow({
+    required this.amount,
+    required this.date,
+    this.invalid = false,
+    this.installmentNumberLabel,
+  });
+}
 
 class _PaymentsTable extends StatelessWidget {
   final List<_PaymentRow> payments;
-  const _PaymentsTable({required this.payments});
+  final bool hasInstallmentPlan;
+  final CaseDetailLoaded s;
+  const _PaymentsTable({required this.payments, required this.hasInstallmentPlan, required this.s});
   @override
   Widget build(BuildContext context) {
-    final fmt = AppDateFormats.date; // centralizzato
+    final fmt = AppDateFormats.date;
     final fmtAmount = NumberFormat('#,##0.00', 'it_IT');
-    final maxRowsNoScroll = 10;
-    final rows = payments.mapIndexed((index, p){
-      final idx = payments.length - index; // descending numbering
-      return DataRow(
-          cells: [
-        DataCell(Text(p.invalid? '?' : '€ ${fmtAmount.format(p.amount)}')),
-        DataCell(Text(p.invalid? '?' : fmt.format(p.date))),
+    const maxRowsNoScroll = 10;
+    final rows = List<DataRow>.generate(payments.length, (index) {
+      final p = payments[index];
+      final number = hasInstallmentPlan
+          ? (p.installmentNumberLabel ?? '?')
+          : (index + 1).toString();
+      return DataRow(cells: [
+        DataCell(Text(number)),
+        DataCell(Text(p.invalid ? '?' : '€ ${fmtAmount.format(p.amount)}')),
+        DataCell(Text(p.invalid ? '?' : fmt.format(p.date))),
       ]);
-    }).toList();
+    });
     final table = DataTable(
-      columns: const [
-        DataColumn(label: Text('Importo')),
-        DataColumn(label: Text('Data')),
+      columns:  [
+        DataColumn(label: hasInstallmentPlan? Text('Rata') : SizedBox.shrink()), // header vuoto
+        const DataColumn(label: Text('Importo')),
+        const DataColumn(label: Text('Data')),
       ],
       rows: rows,
       headingRowHeight: 36,
@@ -879,12 +925,10 @@ class _PaymentsTable extends StatelessWidget {
       dataRowMaxHeight: 48,
     );
     if (payments.length <= maxRowsNoScroll) return table;
-    final height = 48 * maxRowsNoScroll + 40; // approximate header + rows
+    final height = 48 * maxRowsNoScroll + 40;
     return SizedBox(
       height: height.toDouble(),
-      child: SingleChildScrollView(
-        child: table,
-      ),
+      child: SingleChildScrollView(child: table),
     );
   }
 }
@@ -1050,6 +1094,8 @@ class _InstallmentsSideCard extends StatelessWidget {
     final list = s.localInstallments.values.toList()..sort((a,b)=>a.dueDate.compareTo(b.dueDate));
     final fmt = AppDateFormats.date; // centralizzato
     const maxRows = 10;
+    final anyPaid = list.any((i)=> i.paid == true);
+    final canModify = !anyPaid && s.state != CaseState.completata;
     final rows = list.map((i) => DataRow(cells: [
       DataCell(Text(i.installmentNumber.toString())),
       DataCell(Text('€ ${i.amount.toStringAsFixed(2).replaceAll('.', ',')}')),
@@ -1109,10 +1155,20 @@ class _InstallmentsSideCard extends StatelessWidget {
           Row(
             children: [
               Expanded(child: Text('Rate (${list.length})', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600))),
+              if (canModify)
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.edit_calendar, size: 18),
+                  label: const Text('Modifica piano'),
+                  onPressed: () {
+                    // Usa il dialog condiviso accedendo allo stateful ancestor tramite context.findAncestorStateOfType
+                    final state = context.findAncestorStateOfType<_CaseDetailReadOnlyViewState>();
+                    state?._openReplacePlanDialog(s);
+                  },
+                ),
             ],
           ),
           const SizedBox(height: 10),
-            tableWidget,
+          tableWidget,
         ],
       ),
     );
