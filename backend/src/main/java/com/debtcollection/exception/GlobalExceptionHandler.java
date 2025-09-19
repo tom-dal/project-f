@@ -1,4 +1,5 @@
 package com.debtcollection.exception;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.validation.BindException;
 
@@ -8,6 +9,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -74,5 +76,16 @@ public class GlobalExceptionHandler {
         errorResponse.put("timestamp", LocalDateTime.now());
         
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Map<String,Object>> handleAccessDenied(AccessDeniedException ex) {
+        // Garantisce risposta 403 coerente anche per eccezioni lanciate da method security
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of(
+                        "message", ex.getMessage() != null ? ex.getMessage() : "Access Denied",
+                        "error", "AccessDeniedException",
+                        "timestamp", OffsetDateTime.now().toString()
+                ));
     }
 }

@@ -21,6 +21,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.access.AccessDeniedHandler;
 
 @Configuration
 @EnableWebSecurity
@@ -59,6 +60,12 @@ public class SecurityConfig {
                         logger.warn("Unauthorized access attempt: {}", authException.getMessage());
                         response.sendError(HttpServletResponse.SC_UNAUTHORIZED, authException.getMessage());
                     }
+                })
+                .accessDeniedHandler((request, response, accessDeniedException) -> {
+                    // Gestione centralizzata 403 per accessi non autorizzati (utente autenticato senza privilegi)
+                    response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                    response.setContentType("application/json");
+                    response.getWriter().write("{\"message\":\"Access Denied\",\"error\":\"AccessDeniedException\"}");
                 })
             )
             .authenticationProvider(authenticationProvider())
