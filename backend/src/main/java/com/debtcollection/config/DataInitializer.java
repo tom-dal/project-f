@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
+import org.springframework.context.annotation.Profile; // added
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -27,6 +28,7 @@ import java.util.stream.Collectors; // added for post-processing
  * Initializes test user and sample debt cases when application starts up
  */
 @Component
+@Profile({"dev","test"}) // USER PREFERENCE: restrict seeding to non-production profiles
 @RequiredArgsConstructor
 @Slf4j
 public class DataInitializer implements CommandLineRunner {

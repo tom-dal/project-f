@@ -146,63 +146,66 @@ class _LoginScreenState extends State<LoginScreen> {
           }
         },
         child: Center(
-          child: Card(
-            margin: const EdgeInsets.all(32),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Gestione Crediti',
-                      style: Theme.of(context).textTheme.headlineMedium,
-                    ),
-                    const SizedBox(height: 32),
-                    TextFormField(
-                      controller: _usernameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Username',
-                        border: OutlineInputBorder(),
+          child: SizedBox(
+            width: 600,
+            child: Card(
+              margin: const EdgeInsets.all(32),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Gestione Recupero Crediti',
+                        style: Theme.of(context).textTheme.headlineMedium,
                       ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Inserisci il tuo username';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _passwordController,
-                      decoration: const InputDecoration(
-                        labelText: 'Password',
-                        border: OutlineInputBorder(),
+                      const SizedBox(height: 32),
+                      TextFormField(
+                        controller: _usernameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Username',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Inserisci il tuo username';
+                          }
+                          return null;
+                        },
                       ),
-                      obscureText: true,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter your password';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 24),
-                    BlocBuilder<AuthBloc, AuthState>(
-                      builder: (context, state) {
-                        return ElevatedButton(
-                          onPressed: state is AuthLoading ? null : _onLoginPressed,
-                          style: ElevatedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(50),
-                          ),
-                          child: state is AuthLoading
-                              ? const CircularProgressIndicator()
-                              : const Text('Login'),
-                        );
-                      },
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _passwordController,
+                        decoration: const InputDecoration(
+                          labelText: 'Password',
+                          border: OutlineInputBorder(),
+                        ),
+                        obscureText: true,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter your password';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 24),
+                      BlocBuilder<AuthBloc, AuthState>(
+                        builder: (context, state) {
+                          return ElevatedButton(
+                            onPressed: state is AuthLoading ? null : _onLoginPressed,
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(50),
+                            ),
+                            child: state is AuthLoading
+                                ? const CircularProgressIndicator()
+                                : const Text('Login'),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

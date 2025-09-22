@@ -1,4 +1,3 @@
 {
-  "_comment": "Configurazione per sviluppo locale",
-  "API_URL": "http://localhost:8080"
+  "API_URL": "http://82.165.94.207:80/api"
 }

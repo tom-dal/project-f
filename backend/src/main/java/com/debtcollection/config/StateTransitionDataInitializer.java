@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
+import org.springframework.context.annotation.Profile;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -19,6 +20,7 @@ import java.util.Map;
  * Idempotent strategy: skip if any config already exists to allow manual/test custom setups.
  */
 @Component
+@Profile({"dev","prod","test"})
 @RequiredArgsConstructor
 public class StateTransitionDataInitializer implements ApplicationRunner {
 
