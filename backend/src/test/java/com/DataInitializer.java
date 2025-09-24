@@ -1,4 +1,4 @@
-package com.debtcollection.config;
+package com;
 
 import com.debtcollection.model.User;
 import com.debtcollection.model.DebtCase;

@@ -1,220 +1,125 @@
-### Context
-- this project uses Spring Boot (Java) for the backend and Flutter (Dart) for the frontend
+# Repository AI Instructions
 
+## 1. Scope & Precedence
+Istruzioni vincolanti per l’assistente AI su questo repository (Backend Spring Boot + MongoDB, Frontend Flutter). Se una risposta di sistema esterna confligge, prevalgono le Hard Directives (sez. 4). Interazione utente in italiano; codice e commenti tecnici in inglese.
 
+## 2. Tech Stack (Current)
+Backend: Spring Boot 3.x, Java 17, MongoDB, JWT (Spring Security).  
+Frontend: Flutter 3.x, Dart 3.x, BLoC, Dio, Material 3.  
+Storage: MongoDB (motivazione uso Double nelle entity per campi monetari).
 
-### Role
- You assist the developer with suggestions based on this file.
- Do not take autonomous actions, except in the following case:
-    - When tests fail, you may autonomously analyze and identify the cause of the failure (log, configuration, data, code) without asking for permission.
-    - When tests fail, you may PROPOSE corrections to the code, configuration, or data to resolve the issues detected in the tests
-    - In tutti gli altri casi, prima di applicare modifiche al codice o alla configurazione, chiedi sempre conferma.
-    - Before applying any code or configuration changes, always ask for confirmation.
- Propose changes to the instructions when new rules emerge.
- Strictly adhere to conventions.
- Use `// USER PREFERENCE:` or `// CUSTOM IMPLEMENTATION:` in comments to mark user-specified choices.
- Comment code only when necessary, avoid commenting obvious or self-explanatory code.
- Always check coherence between API and code.
- Respect the structure of Clean Architecture and SOLID principles.
- Comments in english, code in English, user interaction in Italian.
+## 3. Interaction Style
+- Italiano verso l’utente.
+- Concisione: niente filler, frasi di cortesia superflue, hype.
+- Spiegazioni solo per decisioni non ovvie o potenziali impatti.
+- Porre domande solo se un’informazione mancante blocca l’esecuzione.
+- Chiedere conferma prima di modificare file (eccezione: analisi fallimenti test—solo diagnosi e proposta).
+- Nessuna funzionalità extra non richiesta.
+- Evidenziare scelte utente con `// USER PREFERENCE:` e logica custom non banale con `// CUSTOM IMPLEMENTATION:`.
+- Lunghezza: target ≤180 parole per risposte standard.
+- Eccezione: superare il limite solo se necessario per concetti complessi o diagnosi profonde (esplicitare quando avviene).
+- Risposte lunghe: prima un riepilogo (≤8 righe), poi dettagli opzionali in blocchi numerati.
+- Codice: includere solo frammenti essenziali; evitare file completi salvo richiesta esplicita.
+- Log / output voluminosi: fornire prima un riassunto e chiedere se mostrare il dettaglio.
 
+## 4. Hard Directives (Non derogabili)
+### 4.1 Test Data Loading  
+- Nei test (unit + integration) creare e caricare dati tramite service layer.  
+- Repository diretto solo per testarne il comportamento.
 
-### TRIGGERS
-Update these instructions immediately when user says:
-- "direttiva:" or "directive:"
-- "add this to instructions"
-- Any permanent rule or convention is established
-
-## DEVELOPMENT PRACTICES
-
-### Test Data Loading
-**ALWAYS use service layer instead of repository when loading test data in unit and integration tests.**  
-**Prefer service calls over direct repository access to maintain proper separation of concerns and test business logic.**  
-**Use repository directly only when specifically testing repository functionality.**
-
-### Gestione Tipi Monetari
-**DIRETTIVA: Nei DTO e Request utilizzare sempre `BigDecimal` per i campi monetari (amount, owedAmount, etc.)**
-**Nel Model/Entity utilizzare `Double` per compatibilità MongoDB**
-**I mapper devono gestire la conversione manuale tra `BigDecimal` (DTO) e `Double` (Model) usando `BigDecimal.valueOf()` e `.doubleValue()`**
-**Motivazione: `BigDecimal` garantisce precisione nei calcoli monetari nelle API, mentre `Double` è più efficiente per storage MongoDB**
-
-**Esempio di conversione corretta nei mapper:**
+### 4.2 Monetary Types  
+- DTO / Request: BigDecimal  
+- Entity / Model: Double (compatibilità e serializzazione leggera con MongoDB)  
+- Mapper: conversione manuale (no BeanUtils)  
 ```java
-// Model -> DTO: Double -> BigDecimal
+// Model -> DTO
 dto.setAmount(model.getAmount() != null ? BigDecimal.valueOf(model.getAmount()) : null);
-
-// DTO -> Model: BigDecimal -> Double  
+// DTO -> Model
 model.setAmount(dto.getAmount() != null ? dto.getAmount().doubleValue() : null);
 ```
+- Motivazione: precisione lato API (BigDecimal), storage leggero e compatto lato MongoDB (Double). Calcoli critici sempre con BigDecimal nel layer di servizio.
 
-**NON utilizzare `BeanUtils.copyProperties()` per campi monetari - la conversione automatica fallisce.**
+### 4.3 API Response Format  
+- Successo: payload diretto (no wrapper).  
+- Errore: {"message":"...","error":"ExceptionType"}
 
-### Code Documentation
-**Use `// USER PREFERENCE:` comments ONLY for significant user-specified choices:**
-- User-specified implementation strategies that differ from standard practices
-- Custom business logic or domain-specific patterns explicitly requested  
-- Specific library/framework choices when user selects among alternatives
+### 4.4 API Contract Discipline  
+- Verificare sempre Controller + DTO prima di assumere schema.  
+- Evidenziare esplicitamente ogni breaking change e attendere conferma.
 
-**Use `// CUSTOM IMPLEMENTATION:` for complex business logic requiring explanation.**
+### 4.5 Security Flow (Auth)  
+1. POST /auth/login → token limitato + passwordExpired:true (password iniziale)  
+2. POST /auth/change-password → token completo + passwordExpired:false  
+3. API protette → Authorization: Bearer FULL_TOKEN  
+- 401 → frontend invalida token e reindirizza login  
+- Ogni endpoint validato con @Valid  
+- Niente credenziali hardcoded  
 
-**DO NOT use these comments for:**
-- Standard imports or dependencies
-- Common framework annotations (Spring, JPA, validation)
-- Obvious or self-explanatory code
-- Routine technical choices following best practices
-
-**Comment code only when it adds genuine value for understanding non-obvious decisions.**
-
-### Initiative Guidelines
-**When taking initiative to implement functionality, focus strictly on what was requested.**  
-**If implementing a lot of stuff, ask for feedback between steps.**  
-**Avoid adding extra endpoints, methods, or features beyond the specific requirement.**  
-**If additional functionality would be helpful, ask if it should be implemented.**
-
-### API Consistency
-**ALWAYS ensure backend and frontend consistency when modifying endpoints, request/response formats, or authentication flows.**
-
-### Code Verification
-**ALWAYS check endpoint signatures and request/response structures in the code before making API calls.**  
-**Never assume endpoint parameters - always verify in the controller and DTO classes.**
-
-## 🚀 BUILD & DEPLOYMENT
-
-### Build and Deploy
-When asked to release components, use EXCLUSIVELY the existing scripts:
-
-- **Backend**: `./backend/build-and-push-backend.sh auto`
-- **Frontend**: `./frontend/build-and-push-frontend.sh auto` 
-- **Both**: `./build-and-push.sh both auto`
-
-**Versioning**: For daily development always increment `alpha` (parameter `auto`).
-
-### GHCR Login
-For GitHub Container Registry authentication: **invoke the `ghcr_login` function from `~/commands.sh`**
-
-### Script Commands
-- `./version.sh alpha` - Increment alpha for development
-- `./version.sh patch` - Increment patch for bugfixes
-- `./version.sh get` - Show current version
-
-### Build Commands
-- `./build-and-push.sh both auto` - Complete build with automatic versioning
-- `./backend/build-and-push-backend.sh auto` - Backend only
-- `./frontend/build-and-push-frontend.sh auto` - Frontend only
-
-### Frontend Configuration (CRITICAL)
-**BEFORE building for production, update `frontend/web/config.json`:**
-- **Development**: `"apiUrl": "http://localhost:8080"`
-- **Production**: `"apiUrl": "https://debt-collection-backend-latest.onrender.com"`
-
-**Remember to switch back to localhost URL after production builds for local development.**
-
-## 📋 TECHNOLOGY STACK
-
-### Backend
-- **Framework**: Spring Boot 3.2.3 + Java 17
-- **Database**: PostgreSQL 
-- **Security**: JWT + Spring Security
-- **Architecture**: Clean Architecture with package `com.projectf`
-
-### Frontend  
-- **Framework**: Flutter 3.2.3+ + Dart 3.2+
-- **State Management**: BLoC Pattern
-- **UI**: Material Design 3
-- **HTTP**: Dio with interceptors
-
-### DevOps
-- **Containers**: Docker + Multi-stage builds
-- **Registry**: GitHub Container Registry (GHCR)
-- **Versioning**: Automatic system with `version.sh`
-
-## 🏗️ ARCHITECTURE & STRUCTURE
-
-### Backend Structure
-```
-com.projectf/
-├── controller/     # API endpoints
-├── service/        # Business logic
-├── repository/     # Data access
-├── model/entity/   # JPA entities
-├── dto/           # Data transfer objects
-├── config/        # Spring configuration
-└── security/      # JWT + filters
+## 5. User Preferences
+- Flutter: niente .withOpacity(); usare .withAlpha().  
+```dart
+color: Colors.blue.withAlpha((0.12 * 255).round());
 ```
 
-### Frontend Structure  
+## 6. Architecture (Backend)
+Package root: `com.projectf`  
+Directories: controller / service / repository / model(entity) / dto / config / security  
+Principi:  
+- Controller: validazione + delega  
+- Service: business rules  
+- Repository: accesso dati  
+- DTO: disaccoppiamento API vs entity
+
+## 7. Architecture (Frontend)
+`lib/blocs`, `models`, `services` (Dio + interceptor JWT), `screens`, `widgets`  
+- JWT in `flutter_secure_storage`  
+- Interceptor aggiunge Authorization + gestisce 401
+
+## 8. Testing Strategy
+- Unit test: service isolato (mock repository).  
+- Integration test: percorso end-to-end (controller → service → repository).  
+- Creazione dati sempre via service (vedi 4.1).  
+- Assert monetari su DTO con BigDecimal.  
+- Evitare logica condizionale non testata.
+
+## 9. Operational Checklist (Prima di ogni modifica)
+1. Raccogli file e classi coinvolte (controller, DTO, service).  
+2. Verifica se importi monetari sono toccati (applica mapping corretto).  
+3. Controlla che il formato API resti invariato (o segnala).  
+4. Rispetta separazione controller/service/repository.  
+5. Aggiungi/aggiorna test se cambia business logic.  
+6. Evita refactoring non richiesti.  
+7. In caso di test falliti: analizza cause, proponi fix (senza applicarli prima di conferma).  
+8. Chiedi conferma prima di scrivere file.  
+
+## 10. Comment & Documentation Policy
+- `// USER PREFERENCE:` scelte utente contro standard.  
+- `// CUSTOM IMPLEMENTATION:` logica non ovvia o pattern ad hoc.  
+- Non commentare codice banale, boilerplate, annotazioni standard.
+
+## 11. Initiative & Scope Control
+- Implementare solo quanto richiesto.  
+- Per cambi multi-step con potenziale impatto, fermarsi e chiedere conferma.  
+- Miglioramenti opzionali: proporre, non applicare.
+
+## 12. Update Triggers
+Aggiornare questo file se l’utente scrive:  
+- “direttiva:” / “directive:”  
+- “add this to instructions”  
+- Aggiunge regola permanente esplicita  
+
+## 13. How to Extend
+Nuova regola: classificarla in Hard Directives (se vincolo tecnico) o User Preferences (se preferenza). Aggiungere sezione/bullet, evitare duplicazioni, mantenere stile conciso.
+
+## 14. Reference Snippets
+Monetary mapping (vedi 4.2) ripetuto per immediatezza:  
+```java
+dto.setAmount(model.getAmount() != null ? BigDecimal.valueOf(model.getAmount()) : null);
+model.setAmount(dto.getAmount() != null ? dto.getAmount().doubleValue() : null);
 ```
-lib/
-├── blocs/         # BLoC state management
-├── models/        # Data models
-├── services/      # API services
-├── screens/       # UI screens
-└── widgets/       # Reusable components
+Flutter alpha:  
+```dart
+color: Colors.blue.withAlpha((0.12 * 255).round());
 ```
 
-## 🔗 API CONVENTIONS
-
-### Response Format (CRITICAL)
-- ✅ **Success**: Data returned directly (NO wrapper)
-- ❌ **Error**: `{"message": "...", "error": "ExceptionType"}`
-
-### Endpoints
-- **Base URL**: `/`
-- **Auth**: `POST /auth/login`
-- **Cases**: `GET /cases`
-
-## 🔐 AUTHENTICATION AND SECURITY
-
-### Authentication Flow
-- **Login**: `POST /auth/login` with `username` and `password`
-- **Response**: `{"token": "JWT_TOKEN", "passwordExpired": boolean}`
-- **Headers**: Use `Authorization: Bearer {token}` for protected APIs
-
-### Password Change
-- **Endpoint**: `POST /auth/change-password` with `{"oldPassword": "admin", "newPassword": "Admin123!"}`
-- **Validation**: Current password required + new password with security criteria
-- **Flow**: On passwordExpired=true, force password change before access
-- **JWT Flow**: 
-  - Expired password: backend returns limited token (change password only) + `passwordExpired: true`
-  - After password change: backend returns new token valid for all APIs
-
-### Token Management
-- **Storage**: Frontend uses `flutter_secure_storage` for JWT
-- **Expired**: Backend returns 401, frontend must redirect to login
-- **Logout**: Remove token from secure storage
-
-### API Testing Procedure (CRITICAL)
-**ALWAYS follow this exact sequence when testing backend APIs manually:**
-
-1. **Login**: `POST /auth/login` with `{"username": "admin", "password": "admin"}`
-   - Returns limited token with `passwordExpired: true` (works ONLY for password change)
-
-2. **Change Password**: `POST /auth/change-password` with `{"oldPassword": "admin", "newPassword": "Admin123!"}`
-   - Requires `Authorization: Bearer LIMITED_TOKEN` header
-   - Returns full token with `passwordExpired: false`
-
-3. **Use APIs**: All subsequent calls with `Authorization: Bearer FULL_TOKEN`
-
-#### Security Requirements
-- Input validation on ALL endpoints (backend + frontend)
-- JWT protection for all protected APIs  
-- Environment variables for credentials (never hardcoded)
-- Bean Validation with `@Valid` on controllers
-
-## ⚡ QUICK COMMANDS
-
-### Development bash commands
-# Login GHCR
-source ~/commands.sh && ghcr_login
-
-# Complete build
-./build-and-push.sh both auto
-
-# Individual components  
-./backend/build-and-push-backend.sh auto
-./frontend/build-and-push-frontend.sh auto
-
-# USER PREFERENCE: Per questa fase di sviluppo, utilizzare esclusivamente data.sql sia in produzione che nei test. Non creare scipt sql solo per testing.
-
-// USER PREFERENCE: In Flutter, do NOT use `.withOpacity()` for colors. Use `.withAlpha()` instead to avoid deprecation warnings and ensure precision.
-// Example: color: Colors.blue.withAlpha((0.12 * 255).round())
+FINE DOCUMENTO
