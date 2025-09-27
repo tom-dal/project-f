@@ -51,7 +51,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ./backend/mvnw -q -f backend/pom.xml clean verify
+          ./backend/mvnw -f backend/pom.xml clean verify
 
       - name: Extract Project Version
         id: projver

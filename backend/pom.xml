@@ -201,6 +201,11 @@
                         <exclude>com/debtcollection/model/Installment*.class</exclude>
                         <exclude>com/debtcollection/model/DebtCaseAudit*.class</exclude>
                     </excludes>
+                    <!-- CUSTOM IMPLEMENTATION: ensure XML report for CI coverage parser -->
+                    <reports>
+                        <report>XML</report>
+                        <report>HTML</report>
+                    </reports>
                 </configuration>
                 <executions>
                     <execution>
