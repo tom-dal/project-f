@@ -131,9 +131,8 @@ gradle-app.setting
 secrets.yaml
 secrets.yml
 config.properties
-application-*.properties
-!application.properties
-!application-production.properties
+application-secrets.properties
+application-secrets-*.properties
 
 # Windows specific
 **/windows/flutter/generated_plugin_registrant.cc
