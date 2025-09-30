@@ -62,31 +62,49 @@ jobs:
           echo "version=$ver" >> $GITHUB_OUTPUT
           echo "Backend version: $ver"
 
-      # JaCoCo report & threshold enforcement (fails job if <85%)
+      # CUSTOM IMPLEMENTATION: Normalizza jacoco.xml (rimozione DOCTYPE + newline) per parser azione coverage
+      - name: Clean JaCoCo XML
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=backend/target/site/jacoco/jacoco.xml
+          dest=backend/target/site/jacoco/jacoco-clean.xml
+          if [[ ! -f "$src" ]]; then
+            echo "Original JaCoCo XML not found: $src" >&2
+            ls -l backend/target/site/jacoco || true
+            exit 1
+          fi
+          # Rimuove DOCTYPE e inserisce newline tra tag per robustezza parser
+          sed 's@<!DOCTYPE[^>]*>@@' "$src" | sed 's/></>\n</g' > "$dest"
+          echo >> "$dest"
+          head -n 5 "$dest"
+          grep -q '<report ' "$dest" || { echo "Cleaned file seems invalid" >&2; exit 1; }
+
+      # JaCoCo report (solo visualizzazione / comment update disabilitato)
       - name: JaCoCo Report
         id: jacoco
         uses: madrapps/jacoco-report@v1.6.1
         with:
-          paths: backend/target/site/jacoco/jacoco.xml
+          paths: backend/target/site/jacoco/jacoco-clean.xml
           token: ${{ secrets.GITHUB_TOKEN }}
           title: Coverage Report
           update-comment: false
-          # USER PREFERENCE: enforcement removed here.
+          # USER PREFERENCE: enforcement spostato allo step summary.
 
       - name: Code Coverage Summary (Enforce Threshold)
         id: coverage_summary
         if: always()
         uses: irongut/CodeCoverageSummary@v1.3.0
         with:
-          filename: backend/target/site/jacoco/jacoco.xml
+          filename: backend/target/site/jacoco/jacoco-clean.xml
           badge: true
-          fail_below_min: true          # Enforcement now here
+          fail_below_min: true
           format: markdown
           hide_branch_rate: false
           hide_complexity: true
           indicators: true
           output: both
-          thresholds: '85 0'            # overall 85%, branch ignored
+          thresholds: '85 0'
 
       - name: Copy JAR Artifact
         if: success()
@@ -123,6 +141,12 @@ jobs:
         if: success()
         working-directory: frontend
         run: flutter pub get
+
+      # CUSTOM IMPLEMENTATION: generate json_serializable sources (g.dart) non versionati
+      - name: Generate Dart Code
+        if: success()
+        working-directory: frontend
+        run: flutter pub run build_runner build --delete-conflicting-outputs
 
       - name: Flutter Build Web
         if: success()
