@@ -25,6 +25,12 @@ jobs:
           java-version: '21'
           cache: maven
 
+      # Added explicit Python 3 setup to avoid integer division issues / ambiguity
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Detect release commit & bump version
         id: release
         if: startsWith(github.event.head_commit.message, 'release:')
@@ -64,50 +70,60 @@ jobs:
 
       - name: Evaluate Coverage & Publish Summary
         id: coverage
-        shell: python
+        shell: bash
         run: |
-          import xml.etree.ElementTree as ET, pathlib, sys, os
-          report = pathlib.Path('backend/target/site/jacoco/jacoco.xml')
-          if not report.exists():
-              print('Jacoco report not found', file=sys.stderr)
-              with open(os.environ['GITHUB_OUTPUT'],'a') as gh: gh.write('coverage_ok=false\ncoverage_ratio=0\n')
-              sys.exit(1)
-          tree = ET.parse(report)
-          root = tree.getroot()
-          missed = covered = 0
-          worst = []
-          for pkg in root.findall('package'):
-              for cls in pkg.findall('class'):
-                  ins = next((c for c in cls.findall('counter') if c.get('type')=='INSTRUCTION'), None)
-                  if not ins: continue
-                  m = int(ins.get('missed')); c = int(ins.get('covered'))
-                  t = m + c
-                  if t == 0: continue
-                  ratio = c / t
-                  worst.append((ratio, cls.get('name').replace('/', '.')))
-                  missed += m; covered += c
-          worst.sort(key=lambda x: x[0])
-          ratio = covered / (missed + covered) if (missed+covered)>0 else 0
-          target = 0.85
-          status = 'PASS ✅' if ratio >= target else 'FAIL ❌'
-          lines = [
-            '## Coverage Summary',
-            f'Instruction Coverage: {ratio*100:.2f}% (target 85%) => {status}',
-            'Excluded: DTO / *Dto|*Request|*Response / model core classes (validation included)',
-            '',
-            '### 10 Worst Classes (Instruction %)',
-            '| Class | % |',
-            '|-------|----|'
-          ]
-          for r, cname in worst[:10]:
-              lines.append(f'| {cname} | {r*100:.2f}% |')
-          summary='\n'.join(lines)
-          print(summary)
-          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f: f.write(summary+'\n')
-          ok = ratio >= target
-          with open(os.environ['GITHUB_OUTPUT'],'a') as gh:
-              gh.write(f"coverage_ok={'true' if ok else 'false'}\n")
-              gh.write(f"coverage_ratio={ratio:.4f}\n")
+          set -euo pipefail
+          echo "Using Python version:" $(python --version)
+          python - <<'PY'
+import xml.etree.ElementTree as ET, pathlib, sys, os
+REPORT = pathlib.Path('backend/target/site/jacoco/jacoco.xml')
+if not REPORT.exists():
+    print('Jacoco report not found', file=sys.stderr)
+    with open(os.environ['GITHUB_OUTPUT'],'a') as gh:
+        gh.write('coverage_ok=false\ncoverage_ratio=0\n')
+    sys.exit(1)
+
+tree = ET.parse(REPORT)
+root = tree.getroot()
+missed = covered = 0
+worst = []
+for pkg in root.findall('package'):
+    for cls in pkg.findall('class'):
+        ins = next((c for c in cls.findall('counter') if c.get('type')=='INSTRUCTION'), None)
+        if not ins:
+            continue
+        m = int(ins.get('missed')); c = int(ins.get('covered'))
+        t = m + c
+        if t == 0:
+            continue
+        ratio_cls = c / t  # Python 3 float division
+        worst.append((ratio_cls, cls.get('name').replace('/', '.')))
+        missed += m; covered += c
+
+worst.sort(key=lambda x: x[0])
+ratio = covered / (missed + covered) if (missed + covered) > 0 else 0.0
+target = 0.85
+status = 'PASS ✅' if ratio >= target else 'FAIL ❌'
+lines = [
+    '## Coverage Summary',
+    f'Instruction Coverage: {ratio*100:.2f}% (target 85%) => {status}',
+    'Excluded: DTO / *Dto|*Request|*Response / model core classes (validation included)',
+    '',
+    '### 10 Worst Classes (Instruction %)',
+    '| Class | % |',
+    '|-------|----|'
+]
+for r, cname in worst[:10]:
+    lines.append(f'| {cname} | {r*100:.2f}% |')
+summary='\n'.join(lines)
+print(summary)
+with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+    f.write(summary+'\n')
+ok = ratio >= target
+with open(os.environ['GITHUB_OUTPUT'],'a') as gh:
+    gh.write(f"coverage_ok={'true' if ok else 'false'}\n")
+    gh.write(f"coverage_ratio={ratio:.4f}\n")
+PY
 
       - name: Copy JAR Artifact
         if: steps.coverage.outputs.coverage_ok == 'true'
