@@ -25,12 +25,6 @@ jobs:
           java-version: '21'
           cache: maven
 
-      # Added explicit Python 3 setup to avoid integer division issues / ambiguity
-      - name: Setup Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
       - name: Detect release commit & bump version
         id: release
         if: startsWith(github.event.head_commit.message, 'release:')
@@ -40,7 +34,7 @@ jobs:
           msg='${{ github.event.head_commit.message }}'
           version=$(echo "$msg" | sed -nE 's/^release:[[:space:]]*([0-9]+\.[0-9]+\.[0-9]+)$/\1/p')
           if [[ -z "$version" ]]; then
-            echo "No semantic version found in release commit message. Skipping bump." 
+            echo "No semantic version found in release commit message. Skipping bump."
             exit 0
           fi
           echo "Detected release version: $version"
@@ -68,82 +62,20 @@ jobs:
           echo "version=$ver" >> $GITHUB_OUTPUT
           echo "Backend version: $ver"
 
-      - name: Evaluate Coverage & Publish Summary
-        id: coverage
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "Using Python version:" $(python --version)
-          python - <<'PY'
-            import xml.etree.ElementTree as ET, pathlib, sys, os, urllib.parse
-            REPORT = pathlib.Path('backend/target/site/jacoco/jacoco.xml')
-            if not REPORT.exists():
-                print('Jacoco report not found', file=sys.stderr)
-                with open(os.environ['GITHUB_OUTPUT'],'a') as gh:
-                    gh.write('coverage_ok=false\ncoverage_ratio=0\ncoverage_badge_md=\n')
-                sys.exit(1)
-            
-            tree = ET.parse(REPORT)
-            root = tree.getroot()
-            missed = covered = 0
-            worst = []
-            for pkg in root.findall('package'):
-                for cls in pkg.findall('class'):
-                    ins = next((c for c in cls.findall('counter') if c.get('type')=='INSTRUCTION'), None)
-                    if not ins:
-                        continue
-                    m = int(ins.get('missed')); c = int(ins.get('covered'))
-                    t = m + c
-                    if t == 0:
-                        continue
-                    ratio_cls = c / t  # Python 3 float division
-                    worst.append((ratio_cls, cls.get('name').replace('/', '.')))
-                    missed += m; covered += c
-            
-            worst.sort(key=lambda x: x[0])
-            ratio = covered / (missed + covered) if (missed + covered) > 0 else 0.0
-            pct = ratio * 100.0
-            # Badge color thresholds
-            if pct >= 85:
-                badge_color = 'brightgreen'
-            elif pct >= 70:
-                badge_color = 'yellow'
-            elif pct >= 50:
-                badge_color = 'orange'
-            else:
-                badge_color = 'red'
-            # Encode percent with two decimals and %25 encoded
-            pct_str = f"{pct:.2f}".rstrip('0').rstrip('.')
-            badge_url = f"https://img.shields.io/badge/coverage-{urllib.parse.quote(pct_str + '%25')}-{badge_color}"
-            badge_md = f"![Coverage]({badge_url})"
-            
-            target = 0.85
-            status = 'PASS ✅' if ratio >= target else 'FAIL ❌'
-            lines = [
-                '## Coverage Summary',
-                f'Instruction Coverage: {pct:.2f}% (target 85%) => {status}',
-                badge_md,
-                'Excluded: DTO / *Dto|*Request|*Response / model core classes (validation included)',
-                '',
-                '### 10 Worst Classes (Instruction %)',
-                '| Class | % |',
-                '|-------|----|'
-            ]
-            for r, cname in worst[:10]:
-                lines.append(f'| {cname} | {r*100:.2f}% |')
-            summary='\n'.join(lines)
-            print(summary)
-            with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
-                f.write(summary+'\n')
-            ok = ratio >= target
-            with open(os.environ['GITHUB_OUTPUT'],'a') as gh:
-                gh.write(f"coverage_ok={'true' if ok else 'false'}\n")
-                gh.write(f"coverage_ratio={ratio:.4f}\n")
-                gh.write(f"coverage_badge_md={badge_md}\n")
-            PY
+      # JaCoCo report & threshold enforcement (fails job if <85%)
+      - name: JaCoCo Report
+        id: jacoco
+        uses: madrapps/jacoco-report@v1.6.1
+        with:
+          paths: backend/target/site/jacoco/jacoco.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
+          min-coverage-overall: 85
+          min-coverage-changed-files: 0
+          title: Coverage Report
+          update-comment: false
 
       - name: Copy JAR Artifact
-        if: steps.coverage.outputs.coverage_ok == 'true'
+        if: success()
         shell: bash
         run: |
           set -euo pipefail
@@ -157,13 +89,13 @@ jobs:
           cp "$jarPath" "project-f-backend-${ver}.jar"
 
       - name: Setup Flutter (stable)
-        if: steps.coverage.outputs.coverage_ok == 'true'
+        if: success()
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
 
       - name: Cache Flutter Pub
-        if: steps.coverage.outputs.coverage_ok == 'true'
+        if: success()
         uses: actions/cache@v4
         with:
           path: |
@@ -174,17 +106,17 @@ jobs:
             flutter-pub-${{ runner.os }}-
 
       - name: Flutter Pub Get
-        if: steps.coverage.outputs.coverage_ok == 'true'
+        if: success()
         working-directory: frontend
         run: flutter pub get
 
       - name: Flutter Build Web
-        if: steps.coverage.outputs.coverage_ok == 'true'
+        if: success()
         working-directory: frontend
         run: flutter build web --release
 
       - name: Upload Backend Jar Artifact
-        if: steps.coverage.outputs.coverage_ok == 'true'
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: backend-jar
@@ -193,17 +125,10 @@ jobs:
           retention-days: 14
 
       - name: Upload Frontend Web Dist
-        if: steps.coverage.outputs.coverage_ok == 'true'
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: frontend-web-dist
           path: frontend/build/web
           if-no-files-found: error
           retention-days: 14
-
-      - name: Fail workflow if coverage below threshold
-        if: steps.coverage.outputs.coverage_ok != 'true'
-        shell: bash
-        run: |
-          echo "Coverage below 85% (actual: ${{ steps.coverage.outputs.coverage_ratio }}). Failing workflow without artifacts." >&2
-          exit 1
