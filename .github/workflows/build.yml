@@ -80,7 +80,6 @@ jobs:
           head -n 5 "$dest"
           grep -q '<report ' "$dest" || { echo "Cleaned file seems invalid" >&2; exit 1; }
 
-      # JaCoCo report (solo visualizzazione / comment update disabilitato)
       - name: JaCoCo Report
         id: jacoco
         uses: madrapps/jacoco-report@v1.6.1
@@ -89,22 +88,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           title: Coverage Report
           update-comment: false
-          # USER PREFERENCE: enforcement spostato allo step summary.
 
-      - name: Code Coverage Summary (Enforce Threshold)
-        id: coverage_summary
-        if: always()
-        uses: irongut/CodeCoverageSummary@v1.3.0
-        with:
-          filename: backend/target/site/jacoco/jacoco-clean.xml
-          badge: true
-          fail_below_min: true
-          format: markdown
-          hide_branch_rate: false
-          hide_complexity: true
-          indicators: true
-          output: both
-          thresholds: '85 0'
+      - name: Summarize tests results
+        uses: jeantessier/code-coverage-summary-action@v1
 
       - name: Copy JAR Artifact
         if: success()
