@@ -62,35 +62,29 @@ jobs:
           echo "version=$ver" >> $GITHUB_OUTPUT
           echo "Backend version: $ver"
 
-      # CUSTOM IMPLEMENTATION: Normalizza jacoco.xml (rimozione DOCTYPE + newline) per parser azione coverage
-      - name: Clean JaCoCo XML
-        shell: bash
-        run: |
-          set -euo pipefail
-          src=backend/target/site/jacoco/jacoco.xml
-          dest=backend/target/site/jacoco/jacoco-clean.xml
-          if [[ ! -f "$src" ]]; then
-            echo "Original JaCoCo XML not found: $src" >&2
-            ls -l backend/target/site/jacoco || true
-            exit 1
-          fi
-          # Rimuove DOCTYPE e inserisce newline tra tag per robustezza parser
-          sed 's@<!DOCTYPE[^>]*>@@' "$src" | sed 's/></>\n</g' > "$dest"
-          echo >> "$dest"
-          head -n 5 "$dest"
-          grep -q '<report ' "$dest" || { echo "Cleaned file seems invalid" >&2; exit 1; }
-
-      - name: JaCoCo Report
-        id: jacoco
-        uses: madrapps/jacoco-report@v1.6.1
+      # generates coverage-report.md and publishes as checkrun
+      - name: JaCoCo Code Coverage Report
+        id: jacoco_reporter
+        uses: PavanMudigonda/jacoco-reporter@v5.0
         with:
-          paths: backend/target/site/jacoco/jacoco-clean.xml
-          token: ${{ secrets.GITHUB_TOKEN }}
-          title: Coverage Report
-          update-comment: false
+          coverage_results_path: backend/target/site/jacoco/jacoco.xml
+          coverage_report_name: Coverage
+          coverage_report_title: JaCoCo
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          skip_check_run: false
+          minimum_coverage: 80
+          fail_below_threshold: false
+          publish_only_summary: false
 
-      - name: Summarize tests results
-        uses: jeantessier/code-coverage-summary-action@v1
+      # Publish Coverage Job Summary  # Optional
+      - name: Add Jacocoo report to workflow run summary
+        run: |
+          echo "| Outcome | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
+          echo "| Code Coverage % | ${{ steps.jacoco_reporter.outputs.coverage_percentage }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| :heavy_check_mark: Number of Lines Covered | ${{ steps.jacoco_reporter.outputs.covered_lines }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| :x: Number of Lines Missed | ${{ steps.jacoco_reporter.outputs.missed_lines }} |" >> $GITHUB_STEP_SUMMARY
+      
 
       - name: Copy JAR Artifact
         if: success()
@@ -128,7 +122,6 @@ jobs:
         working-directory: frontend
         run: flutter pub get
 
-      # CUSTOM IMPLEMENTATION: generate json_serializable sources (g.dart) non versionati
       - name: Generate Dart Code
         if: success()
         working-directory: frontend
