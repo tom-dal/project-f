@@ -47,11 +47,11 @@ jobs:
           git push origin HEAD:main --tags
           echo "version=$version" >> $GITHUB_OUTPUT
 
-      - name: Build & Test Backend (Maven verify)
+      - name: Build & Test Backend (Maven verify + Jacoco XML)
         shell: bash
         run: |
           set -euo pipefail
-          ./backend/mvnw -f backend/pom.xml clean verify
+          ./backend/mvnw -f backend/pom.xml clean verify jacoco:report
 
       - name: Extract Project Version
         id: projver
