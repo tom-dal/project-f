@@ -100,7 +100,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'master'
-          flutter-version: '3.37.0-1.0.pre-366'
+          flutter-version: '3.37.0-1.0'
 
       - name: Cache Flutter Pub
         if: success()

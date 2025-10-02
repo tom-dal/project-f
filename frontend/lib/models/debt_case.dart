@@ -15,7 +15,7 @@ class DebtCase {
   final DateTime? createdDate;
   @JsonKey(fromJson: _dateFromJson, toJson: _dateToJson)
   final DateTime? updatedDate;
-  @JsonKey(fromJson: _dateFromJson, toJson: _dateToJson)
+  @JsonKey(fromJson: _dateFromJsonRequired, toJson: _dateToJson)
   final DateTime lastStateDate;
   @JsonKey(fromJson: _dateFromJson, toJson: _dateToJson)
   final DateTime? nextDeadlineDate;
@@ -61,14 +61,21 @@ class DebtCase {
   static DateTime? _dateFromJson(dynamic value) {
     if (value == null) return null;
     if (value is String) {
-      // Handle date-only format (e.g., "2025-02-19")
       if (value.length == 10 && !value.contains('T')) {
         return DateTime.parse(value);
       }
-      // Handle full ISO format (e.g., "2025-02-19T00:00:00")
       return DateTime.parse(value);
     }
     return null;
+  }
+
+  // CUSTOM IMPLEMENTATION: ensure non-null for required DateTime field
+  static DateTime _dateFromJsonRequired(dynamic value) {
+    final dt = _dateFromJson(value);
+    if (dt == null) {
+      throw const FormatException('lastStateDate is required but was null or invalid');
+    }
+    return dt;
   }
 
   static String? _dateToJson(DateTime? value) {
