@@ -78,7 +78,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           min-coverage-overall: 85
           min-coverage-changed-files: 85
-          comment-type: summary
+          comment-type: both
 
 
       - name: Copy JAR Artifact
@@ -99,7 +99,8 @@ jobs:
         if: success()
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          channel: 'master'
+          flutter-version: '3.37.0-1.0.pre-366'
 
       - name: Cache Flutter Pub
         if: success()
