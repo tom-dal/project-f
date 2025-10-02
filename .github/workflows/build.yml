@@ -8,6 +8,9 @@ concurrency:
   group: build-main
   cancel-in-progress: true
 
+permissions:
+  contents: write  # needed to create GitHub Release
+
 jobs:
   ci:
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
@@ -32,20 +35,19 @@ jobs:
         run: |
           set -euo pipefail
           msg='${{ github.event.head_commit.message }}'
-          version=$(echo "$msg" | sed -nE 's/^release:[[:space:]]*([0-9]+\.[0-9]+\.[0-9]+)$/\1/p')
+          # Accept semver with optional pre-release portion (e.g., 1.2.3-rc1)
+          version=$(echo "$msg" | sed -nE 's/^release:[[:space:]]*([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z\.-]+)?)$/\1/p')
           if [[ -z "$version" ]]; then
-            echo "No semantic version found in release commit message. Skipping bump."
-            exit 0
-          fi
+            echo "No semantic version found in release commit message. Skipping bump."; exit 0; fi
           echo "Detected release version: $version"
           mvn -q -f backend/pom.xml versions:set -DnewVersion="$version" -DgenerateBackupPoms=false
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add backend/pom.xml
           git commit -m "chore: release version $version [skip ci]"
-          git tag "v$version"
-          git push origin HEAD:main --tags
+          # Defer tag + push until build success to avoid tagging broken build
           echo "version=$version" >> $GITHUB_OUTPUT
+          if [[ "$version" == *-* ]]; then echo "prerelease=true" >> $GITHUB_OUTPUT; else echo "prerelease=false" >> $GITHUB_OUTPUT; fi
 
       - name: Build & Test Backend (Maven verify + Jacoco XML)
         shell: bash
@@ -59,7 +61,7 @@ jobs:
           set -euo pipefail
           rep=backend/target/site/jacoco/jacoco.xml
           if [[ ! -f "$rep" ]]; then
-            echo "Missing Jacoco XML: $in" >&2; exit 1; fi
+            echo "Missing Jacoco XML: $rep" >&2; exit 1; fi
 
       - name: Extract Project Version
         id: projver
@@ -80,8 +82,7 @@ jobs:
           min-coverage-changed-files: 85
           comment-type: both
 
-
-      - name: Copy JAR Artifact
+      - name: Copy JAR Artifact (used only for release assets)
         if: success()
         shell: bash
         run: |
@@ -127,20 +128,64 @@ jobs:
         working-directory: frontend
         run: flutter build web --release
 
-      - name: Upload Backend Jar Artifact
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-jar
-          path: project-f-backend-*.jar
-          if-no-files-found: error
-          retention-days: 14
+      - name: Tag & Push Release (only after successful build)
+        if: success() && steps.release.outputs.version != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='${{ steps.release.outputs.version }}'
+          git tag "v$version"
+          git push origin HEAD:main --tags
+          echo "Tagged and pushed v$version"
 
-      - name: Upload Frontend Web Dist
-        if: success()
-        uses: actions/upload-artifact@v4
+      - name: Package Frontend Web Dist (only on release)
+        if: success() && steps.release.outputs.version != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          ver='${{ steps.projver.outputs.version }}'
+          tarball="frontend-web-dist-${ver}.tar.gz"
+          tar -czf "$tarball" -C frontend/build/web .
+          ls -lh "$tarball"
+
+      - name: Generate Checksums (only on release)
+        if: success() && steps.release.outputs.version != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          ver='${{ steps.projver.outputs.version }}'
+          sha256sum project-f-backend-${ver}.jar frontend-web-dist-${ver}.tar.gz > checksums.txt
+          echo "Generated checksums:"; cat checksums.txt
+
+      - name: Generate Changelog
+        id: changelog
+        if: steps.release.outputs.version != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          prev_tag=$(git describe --tags --abbrev=0 v${{ steps.release.outputs.version }}^ 2>/dev/null || echo "")
+          if [ -n "$prev_tag" ]; then
+            log=$(git --no-pager log --pretty=format:'- %s' ${prev_tag}..HEAD)
+          else
+            log=$(git --no-pager log --pretty=format:'- %s')
+          fi
+          echo "log<<EOF" >> $GITHUB_OUTPUT
+          echo "$log" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        if: steps.release.outputs.version != ''
+        uses: softprops/action-gh-release@v2
         with:
-          name: frontend-web-dist
-          path: frontend/build/web
-          if-no-files-found: error
-          retention-days: 14
+          tag_name: v${{ steps.release.outputs.version }}
+          name: Release ${{ steps.release.outputs.version }}
+          prerelease: ${{ steps.release.outputs.prerelease }}
+          body: |
+            Changelog:
+            ${{ steps.changelog.outputs.log }}
+          files: |
+            project-f-backend-${{ steps.projver.outputs.version }}.jar
+            frontend-web-dist-${{ steps.projver.outputs.version }}.tar.gz
+            checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
