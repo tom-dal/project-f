@@ -53,19 +53,13 @@ jobs:
           set -euo pipefail
           ./backend/mvnw -f backend/pom.xml clean verify jacoco:report
 
-      - name: Sanitize Jacoco XML
+      - name: Check Jacoco XML Report Exists
         shell: bash
         run: |
           set -euo pipefail
-          in=backend/target/site/jacoco/jacoco.xml
-          out=backend/target/site/jacoco/jacoco.cleaned.xml
-          if [[ ! -f "$in" ]]; then
+          rep=backend/target/site/jacoco/jacoco.xml
+          if [[ ! -f "$rep" ]]; then
             echo "Missing Jacoco XML: $in" >&2; exit 1; fi
-          # CUSTOM IMPLEMENTATION: remove DOCTYPE to avoid action parser failure
-          sed '/<!DOCTYPE report/d' "$in" > "$out"
-          # quick sanity check
-          grep -q '<package ' "$out" || { echo "Sanitized file missing package tags" >&2; exit 1; }
-          echo "Sanitized Jacoco XML written to $out"
 
       - name: Extract Project Version
         id: projver
@@ -77,18 +71,14 @@ jobs:
           echo "Backend version: $ver"
 
       # Publish Coverage Job Summary
-      - name: Code Coverage Summary
-        uses: irongut/CodeCoverageSummary@v1.3.0
+      - name: Add coverage to PR
+        uses: madrapps/jacoco-report@v1.7.2
         with:
-          filename: backend/target/site/jacoco/jacoco.cleaned.xml
-          badge: true
-          fail_below_min: false
-          format: markdown
-          hide_branch_rate: false
-          hide_complexity: true
-          indicators: true
-          output: both
-          thresholds: 85 0
+          paths: ${{ github.workspace }}/backend/target/site/jacoco/jacoco.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
+          min-coverage-overall: 85
+          min-coverage-changed-files: 85
+          comment-type: summary
 
 
       - name: Copy JAR Artifact
